@@ -2,3 +2,7 @@ fastapi
 uvicorn[standard]
 pandas
 python-multipart
+fastf1
+ergast-py
+qdrant-client
+torch
