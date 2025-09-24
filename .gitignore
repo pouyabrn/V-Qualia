@@ -45,3 +45,6 @@ Thumbs.db
 # Cache
 .cache/
 .pytest_cache/
+DockerDesktopInstaller.exe
+progress.txt
+progress.txt
