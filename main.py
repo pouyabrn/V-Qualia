@@ -1,13 +1,17 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import StreamingResponse
 import uvicorn
 import os
 from typing import Optional, List
 import logging
 import fastf1
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime
+import io
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -225,6 +229,95 @@ async def get_f1_sessions(
         raise HTTPException(
             status_code=500,
             detail=f"Error fetching F1 sessions: {str(e)}"
+        )
+
+@app.post("/api/v1/f1/telemetry/visualize")
+async def visualize_f1_telemetry(data: dict, api_key: str = Depends(verify_api_key)):
+    """Generate F1 telemetry visualization from JSON data"""
+    try:
+        logger.info("Generating F1 telemetry visualization")
+        
+        # Extract telemetry data from the JSON structure
+        telemetry_data = data['data']['data']
+        
+        # Convert brake boolean values to 0/100
+        brake_data = [100 if brake else 0 for brake in telemetry_data['brake']]
+        
+        # Convert time strings to seconds
+        def time_to_seconds(time_str):
+            try:
+                if 'days' in time_str:
+                    dt = pd.to_timedelta(time_str)
+                    return dt.total_seconds()
+                elif ':' in time_str:
+                    parts = time_str.split(':')
+                    if len(parts) == 3:
+                        hours, minutes, seconds = parts
+                        return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                else:
+                    return float(time_str)
+            except:
+                return 0
+        
+        time_seconds = [time_to_seconds(t) for t in telemetry_data['time']]
+        
+        # Create the visualization
+        fig, axes = plt.subplots(5, 1, figsize=(12, 16), sharex=True)
+        fig.suptitle(f'F1 Telemetry - {data["data"]["driver"]}', fontsize=16, fontweight='bold')
+        
+        # Plot 1: Speed vs Time
+        axes[0].plot(time_seconds, telemetry_data['speed'], 'b-', linewidth=1.5)
+        axes[0].set_ylabel('Speed (km/h)', fontsize=12)
+        axes[0].set_title('Speed vs Time', fontsize=14, fontweight='bold')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].set_ylim(0, None)
+        
+        # Plot 2: RPM vs Time
+        axes[1].plot(time_seconds, telemetry_data['rpm'], 'r-', linewidth=1.5)
+        axes[1].set_ylabel('RPM', fontsize=12)
+        axes[1].set_title('RPM vs Time', fontsize=14, fontweight='bold')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].set_ylim(0, None)
+        
+        # Plot 3: Gear vs Time (step plot)
+        axes[2].step(time_seconds, telemetry_data['gear'], 'g-', linewidth=2, where='post', drawstyle='steps-post')
+        axes[2].set_ylabel('Gear', fontsize=12)
+        axes[2].set_title('Gear vs Time', fontsize=14, fontweight='bold')
+        axes[2].grid(True, alpha=0.3)
+        axes[2].set_ylim(0.5, max(telemetry_data['gear']) + 0.5)
+        axes[2].set_yticks(range(1, max(telemetry_data['gear']) + 1))
+        
+        # Plot 4: Throttle vs Time
+        axes[3].plot(time_seconds, telemetry_data['throttle'], 'orange', linewidth=1.5)
+        axes[3].set_ylabel('Throttle (%)', fontsize=12)
+        axes[3].set_title('Throttle vs Time', fontsize=14, fontweight='bold')
+        axes[3].grid(True, alpha=0.3)
+        axes[3].set_ylim(0, 100)
+        
+        # Plot 5: Brake vs Time (step plot)
+        axes[4].step(time_seconds, brake_data, 'purple', linewidth=2, where='post', drawstyle='steps-post')
+        axes[4].set_ylabel('Brake (%)', fontsize=12)
+        axes[4].set_title('Brake vs Time', fontsize=14, fontweight='bold')
+        axes[4].set_xlabel('Time (seconds)', fontsize=12)
+        axes[4].grid(True, alpha=0.3)
+        axes[4].set_ylim(0, 100)
+        
+        plt.tight_layout()
+        
+        # Save plot to bytes
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
+        img_buffer.seek(0)
+        plt.close()
+        
+        # Return the image
+        return StreamingResponse(img_buffer, media_type="image/png")
+        
+    except Exception as e:
+        logger.error(f"Error generating visualization: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating visualization: {str(e)}"
         )
 
 if __name__ == "__main__":
