@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="V-Qualia Analysis API",
-    description="A FastAPI server for data analysis",
+    description="A FastAPI server for F1 data analysis and racing telemetry",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -30,15 +30,16 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # development phase onlyyy
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # Trusted host middleware
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["*"]  # development phase onlyyy
+    allowed_hosts=["*"]  # Development phase only
 )
 
 
@@ -54,6 +55,7 @@ def verify_api_key(api_key: str = Query(..., description="API Key for authentica
         )
     return api_key
 
+
 @app.get("/")
 async def root():
     """Root endpoint - health check"""
@@ -63,6 +65,7 @@ async def root():
         "version": "1.0.0"
     }
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -71,57 +74,55 @@ async def health_check():
         "service": "V-Qualia Analysis API"
     }
 
+
 @app.get("/api/v1/status")
 async def api_status(api_key: str = Depends(verify_api_key)):
     """Protected endpoint that requires API key"""
     return {
         "message": "API is working correctly",
         "authenticated": True,
-        "timestamp": "2024-01-01T00:00:00Z",
+        "timestamp": datetime.now().isoformat(),
         "api_key_provided": True
     }
+
 
 @app.post("/api/v1/analyze")
 async def analyze_data(
     data: dict,
     api_key: str = Depends(verify_api_key)
 ):
-    """Endpoint for data analysis (placeholder for future implementation)"""
+    """Endpoint for data analysis"""
     logger.info(f"Analysis request received: {len(data)} items")
     
-    # analysis logic (future implementation)
     analysis_result = {
         "status": "success",
         "message": "Data analysis completed",
         "data_points": len(data) if isinstance(data, (list, dict)) else 1,
-        "timestamp": "2024-01-01T00:00:00Z",
+        "timestamp": datetime.now().isoformat(),
         "authenticated": True
     }
     
     return analysis_result
 
+
 @app.get("/api/v1/f1/telemetry")
 async def get_f1_telemetry(
     year: int = Query(2024, description="F1 season year (2018-2024)"),
-    race: str = Query("Monaco", description="Race name (e.g., 'Monaco', 'Silverstone', 'Spa')"),
+    race: str = Query("Monaco", description="Race name"),
     session: str = Query("R", description="Session type: FP1, FP2, FP3, Q, R (Race)"),
-    driver: Optional[str] = Query(None, description="Driver abbreviation (e.g., 'VER', 'HAM', 'LEC')"),
+    driver: Optional[str] = Query(None, description="Driver abbreviation"),
     api_key: str = Depends(verify_api_key)
 ):
-
+    """Get F1 telemetry data"""
     try:
         logger.info(f"Fetching F1 telemetry for {year} {race} {session}")
         
-        # Cache is disabled for now to prevent system32 access errors
         fastf1.Cache.set_disabled()
         
-        # Load the session
         session_obj = fastf1.get_session(year, race, session)
         session_obj.load()
         
-        # Get telemetry data
         if driver:
-            # Get data for specific driver
             driver_data = session_obj.laps.pick_driver(driver)
             if driver_data.empty:
                 raise HTTPException(
@@ -135,7 +136,7 @@ async def get_f1_telemetry(
                 "laps": len(driver_data),
                 "telemetry_points": len(telemetry),
                 "data": {
-                    "speed": telemetry['Speed'].tolist()[:100],  # Limit to 100 points
+                    "speed": telemetry['Speed'].tolist()[:100],
                     "rpm": telemetry['RPM'].tolist()[:100],
                     "gear": telemetry['nGear'].tolist()[:100],
                     "throttle": telemetry['Throttle'].tolist()[:100],
@@ -144,7 +145,6 @@ async def get_f1_telemetry(
                 }
             }
         else:
-            # Get data for all drivers
             all_laps = session_obj.laps
             telemetry_data = {
                 "session_info": {
@@ -157,7 +157,6 @@ async def get_f1_telemetry(
                 "drivers_data": []
             }
             
-            # Get data for each driver (limit to first 3 drivers for performance)
             for driver_name in all_laps['Driver'].unique()[:3]:
                 driver_laps = all_laps.pick_driver(driver_name)
                 if not driver_laps.empty:
@@ -167,7 +166,7 @@ async def get_f1_telemetry(
                         "laps": len(driver_laps),
                         "telemetry_points": len(driver_telemetry),
                         "data": {
-                            "speed": driver_telemetry['Speed'].tolist()[:50],  # limit to 50 points per driver
+                            "speed": driver_telemetry['Speed'].tolist()[:50],
                             "rpm": driver_telemetry['RPM'].tolist()[:50],
                             "gear": driver_telemetry['nGear'].tolist()[:50],
                             "throttle": driver_telemetry['Throttle'].tolist()[:50],
@@ -189,20 +188,18 @@ async def get_f1_telemetry(
             detail=f"Error fetching F1 telemetry data: {str(e)}"
         )
 
+
 @app.get("/api/v1/f1/sessions")
 async def get_f1_sessions(
     year: int = Query(2024, description="F1 season year"),
     api_key: str = Depends(verify_api_key)
 ):
-
+    """Get F1 sessions for a given year"""
     try:
         logger.info(f"Fetching F1 sessions for {year}")
         
-        
-        # Cache is disabled for now
         fastf1.Cache.set_disabled()
         
-        #event
         schedule = fastf1.get_event_schedule(year)
         
         sessions_data = []
@@ -231,19 +228,17 @@ async def get_f1_sessions(
             detail=f"Error fetching F1 sessions: {str(e)}"
         )
 
+
 @app.post("/api/v1/f1/telemetry/visualize")
 async def visualize_f1_telemetry(data: dict, api_key: str = Depends(verify_api_key)):
     """Generate F1 telemetry visualization from JSON data"""
     try:
         logger.info("Generating F1 telemetry visualization")
         
-        # Extract telemetry data from the JSON structure
         telemetry_data = data['data']['data']
         
-        # Convert brake boolean values to 0/100
         brake_data = [100 if brake else 0 for brake in telemetry_data['brake']]
         
-        # Convert time strings to seconds
         def time_to_seconds(time_str):
             try:
                 if 'days' in time_str:
@@ -261,41 +256,35 @@ async def visualize_f1_telemetry(data: dict, api_key: str = Depends(verify_api_k
         
         time_seconds = [time_to_seconds(t) for t in telemetry_data['time']]
         
-        # Create the visualization
         fig, axes = plt.subplots(5, 1, figsize=(12, 16), sharex=True)
         fig.suptitle(f'F1 Telemetry - {data["data"]["driver"]}', fontsize=16, fontweight='bold')
         
-        # Plot 1: Speed vs Time
         axes[0].plot(time_seconds, telemetry_data['speed'], 'b-', linewidth=1.5)
         axes[0].set_ylabel('Speed (km/h)', fontsize=12)
         axes[0].set_title('Speed vs Time', fontsize=14, fontweight='bold')
         axes[0].grid(True, alpha=0.3)
         axes[0].set_ylim(0, None)
         
-        # Plot 2: RPM vs Time
         axes[1].plot(time_seconds, telemetry_data['rpm'], 'r-', linewidth=1.5)
         axes[1].set_ylabel('RPM', fontsize=12)
         axes[1].set_title('RPM vs Time', fontsize=14, fontweight='bold')
         axes[1].grid(True, alpha=0.3)
         axes[1].set_ylim(0, None)
         
-        # Plot 3: Gear vs Time (step plot)
-        axes[2].step(time_seconds, telemetry_data['gear'], 'g-', linewidth=2, where='post', drawstyle='steps-post')
+        axes[2].step(time_seconds, telemetry_data['gear'], 'g-', linewidth=2, where='post')
         axes[2].set_ylabel('Gear', fontsize=12)
         axes[2].set_title('Gear vs Time', fontsize=14, fontweight='bold')
         axes[2].grid(True, alpha=0.3)
         axes[2].set_ylim(0.5, max(telemetry_data['gear']) + 0.5)
         axes[2].set_yticks(range(1, max(telemetry_data['gear']) + 1))
         
-        # Plot 4: Throttle vs Time
         axes[3].plot(time_seconds, telemetry_data['throttle'], 'orange', linewidth=1.5)
         axes[3].set_ylabel('Throttle (%)', fontsize=12)
         axes[3].set_title('Throttle vs Time', fontsize=14, fontweight='bold')
         axes[3].grid(True, alpha=0.3)
         axes[3].set_ylim(0, 100)
         
-        # Plot 5: Brake vs Time (step plot)
-        axes[4].step(time_seconds, brake_data, 'purple', linewidth=2, where='post', drawstyle='steps-post')
+        axes[4].step(time_seconds, brake_data, 'purple', linewidth=2, where='post')
         axes[4].set_ylabel('Brake (%)', fontsize=12)
         axes[4].set_title('Brake vs Time', fontsize=14, fontweight='bold')
         axes[4].set_xlabel('Time (seconds)', fontsize=12)
@@ -304,13 +293,11 @@ async def visualize_f1_telemetry(data: dict, api_key: str = Depends(verify_api_k
         
         plt.tight_layout()
         
-        # Save plot to bytes
         img_buffer = io.BytesIO()
         plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
         img_buffer.seek(0)
         plt.close()
         
-        # Return the image
         return StreamingResponse(img_buffer, media_type="image/png")
         
     except Exception as e:
@@ -320,6 +307,7 @@ async def visualize_f1_telemetry(data: dict, api_key: str = Depends(verify_api_k
             detail=f"Error generating visualization: {str(e)}"
         )
 
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
@@ -328,3 +316,4 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
+
