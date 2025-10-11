@@ -1,0 +1,56 @@
+{
+  "name": "F2",
+  "mass": {
+    "mass": 800.0,
+    "cog_height": 0.3,
+    "wheelbase": 3.6,
+    "weight_distribution": 0.46
+  },
+  "aerodynamics": {
+    "Cl": -1.8,
+    "Cd": 0.7,
+    "frontal_area": 1.6,
+    "air_density": 1.225
+  },
+  "tire": {
+    "mu_x": 1.8,
+    "mu_y": 1.9,
+    "load_sensitivity": 0.8,
+    "tire_radius": 0.33
+  },
+  "powertrain": {
+    "engine_torque_curve": {
+      "5000": 600,
+      "6000": 680,
+      "7000": 760,
+      "8000": 840,
+      "9000": 910,
+      "10000": 970,
+      "11000": 1000,
+      "12000": 990,
+      "13000": 950,
+      "14000": 880,
+      "15000": 780
+    },
+    "gear_ratios": [
+      13.0,
+      10.2,
+      8.3,
+      6.8,
+      5.7,
+      4.9,
+      4.2,
+      3.7
+    ],
+    "final_drive": 1.0,
+    "efficiency": 0.98,
+    "max_rpm": 15000.0,
+    "min_rpm": 5000.0
+  },
+  "brake": {
+    "max_brake_force": 30000.0,
+    "brake_bias": 0.62
+  },
+  "created_at": "2025-10-11T20:44:37.790806",
+  "updated_at": "2025-10-11T20:44:37.790818"
+}

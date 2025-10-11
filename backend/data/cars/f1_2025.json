@@ -1,0 +1,46 @@
+{
+  "name": "F1_2025",
+  "mass": {
+    "mass": 798.0,
+    "cog_height": 0.25,
+    "wheelbase": 3.6,
+    "weight_distribution": 0.46
+  },
+  "aerodynamics": {
+    "Cl": -1.5,
+    "Cd": 0.55,
+    "frontal_area": 1.42,
+    "air_density": 1.225
+  },
+  "tire": {
+    "mu_x": 2.2,
+    "mu_y": 2.4,
+    "load_sensitivity": 0.80,
+    "tire_radius": 0.33
+  },
+  "powertrain": {
+    "engine_torque_curve": {
+      "5000": 600,
+      "6000": 680,
+      "7000": 760,
+      "8000": 840,
+      "9000": 910,
+      "10000": 970,
+      "11000": 1000,
+      "12000": 990,
+      "13000": 950,
+      "14000": 880,
+      "15000": 780
+    },
+    "gear_ratios": [13.0, 10.2, 8.3, 6.8, 5.7, 4.9, 4.2, 3.7],
+    "final_drive": 1.0,
+    "efficiency": 0.98,
+    "max_rpm": 15000,
+    "min_rpm": 5000
+  },
+  "brake": {
+    "max_brake_force": 30000,
+    "brake_bias": 0.62
+  }
+}
+
