@@ -26,6 +26,9 @@ frontend/.env.local
 
 # Backend specific
 backend/__pycache__/
+backend/data/cars/*.json
+backend/data/tracks/*.csv
+backend/data/predictions/*.csv
 
 # FastF1 Cache
 f1_cache/

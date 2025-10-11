@@ -12,8 +12,7 @@ import LiveStandalone from './components/pages/LiveStandalone';
 import LapReplay from './components/pages/LapReplay';
 import LapReplayViewer from './components/pages/LapReplayViewer';
 import ErrorBoundary from './components/common/ErrorBoundary';
-import { parseCSV, parseTrackCSV } from './utils/csvParser';
-import { getDefaultCar, montrealTrackCSV } from './utils/defaultData';
+import { parseCSV } from './utils/csvParser';
 
 function App() {
   // ALL HOOKS MUST BE AT THE TOP - React Rules of Hooks!
@@ -23,16 +22,6 @@ function App() {
   const [fileName, setFileName] = useState('');
   const [rawCsvText, setRawCsvText] = useState('');
   
-  // Cars state
-  const [cars, setCars] = useState([getDefaultCar()]);
-  const [selectedCar, setSelectedCar] = useState(cars[0]);
-  
-  // Tracks state
-  const [tracks, setTracks] = useState([]);
-  const [selectedTrack, setSelectedTrack] = useState(null);
-
-  // Wrap the entire app in ErrorBoundary for crash recovery
-
   // Check for standalone mode and lap replay
   useEffect(() => {
     const checkStandalone = () => {
@@ -44,13 +33,6 @@ function App() {
     window.addEventListener('hashchange', checkStandalone);
     
     return () => window.removeEventListener('hashchange', checkStandalone);
-  }, []);
-
-  // Initialize default track
-  useEffect(() => {
-    const defaultTrack = parseTrackCSV(montrealTrackCSV, "Montreal");
-    setTracks([defaultTrack]);
-    setSelectedTrack(defaultTrack);
   }, []);
 
   // EARLY RETURN AFTER ALL HOOKS - Now it's safe!
@@ -89,22 +71,6 @@ function App() {
     }
   };
 
-  // Handle track file upload
-  const handleTrackUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target.result;
-        const trackName = file.name.replace('.csv', '').replace(/_/g, ' ');
-        const newTrack = parseTrackCSV(text, trackName);
-        setTracks(prev => [...prev, newTrack]);
-        setSelectedTrack(newTrack);
-      };
-      reader.readAsText(file);
-    }
-  };
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-black text-gray-200">
@@ -124,28 +90,13 @@ function App() {
 
           {activeTab === 'compare' && <ComparePage />}
 
-          {activeTab === 'predict' && <PredictPage cars={cars} tracks={tracks} />}
+          {activeTab === 'predict' && <PredictPage />}
 
           {activeTab === 'live' && <LivePage />}
 
-          {activeTab === 'cars' && (
-            <CarsPage
-              cars={cars}
-              setCars={setCars}
-              selectedCar={selectedCar}
-              setSelectedCar={setSelectedCar}
-            />
-          )}
+          {activeTab === 'cars' && <CarsPage />}
 
-          {activeTab === 'tracks' && (
-            <TracksPage
-              tracks={tracks}
-              setTracks={setTracks}
-              selectedTrack={selectedTrack}
-              setSelectedTrack={setSelectedTrack}
-              onTrackUpload={handleTrackUpload}
-            />
-          )}
+          {activeTab === 'tracks' && <TracksPage />}
         </main>
 
         <Footer />

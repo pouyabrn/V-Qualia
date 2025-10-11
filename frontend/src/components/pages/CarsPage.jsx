@@ -1,20 +1,182 @@
 import { useState, useEffect } from 'react';
-import { Plus, Save, Thermometer, Wind, ToyBrick, Cog, PanelTop, Car, Trash2 } from 'lucide-react';
+import { Plus, Save, Thermometer, Wind, ToyBrick, Cog, PanelTop, Car, Trash2, RefreshCw } from 'lucide-react';
 import FormInput from '../common/FormInput';
 import CollapsibleSection from '../common/CollapsibleSection';
-import { getBlankCar } from '../../utils/defaultData';
+import { carsAPI } from '../../utils/api';
 
-const CarsPage = ({ cars, setCars, selectedCar, setSelectedCar }) => {
-  const [carFormData, setCarFormData] = useState(selectedCar);
+const CarsPage = () => {
+  const [cars, setCars] = useState([]);
+  const [selectedCar, setSelectedCar] = useState(null);
+  const [carFormData, setCarFormData] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
+  // load cars from backend on mount
   useEffect(() => {
-    if (selectedCar) {
-      setCarFormData(JSON.parse(JSON.stringify(selectedCar))); // Deep copy
-      setIsCreating(false);
-    } else {
+    loadCars();
+  }, []);
+
+  const loadCars = async () => {
+    try {
+      setLoading(true);
+      const response = await carsAPI.getAll();
+      const carsList = response.cars || [];
+      console.log('loaded cars from backend:', carsList);
+      setCars(carsList);
+      
+      // auto-select first car if we have cars
+      if (carsList.length > 0) {
+        console.log('selecting first car:', carsList[0]);
+        const converted = convertBackendToFrontend(carsList[0]);
+        console.log('converted car data:', converted);
+        
+        if (converted) {
+          setSelectedCar(carsList[0]);
+          setCarFormData(converted);
+          setIsCreating(false);
+        } else {
+          // conversion failed, show create form
+          console.error('failed to convert car data, showing create form');
+          setSelectedCar(null);
+          setIsCreating(true);
+          setCarFormData(getBlankCar());
+        }
+      } else {
+        // no cars in backend, show creating state
+        console.log('no cars found, showing create form');
+        setSelectedCar(null);
+        setIsCreating(true);
+        setCarFormData(getBlankCar());
+      }
+    } catch (error) {
+      console.error('failed to load cars:', error);
+      alert('couldnt load cars from server: ' + error.message);
+      // on error, show blank form so user isn't stuck
       setCarFormData(getBlankCar());
-      setIsCreating(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // convert backend format to frontend format
+  const convertBackendToFrontend = (backendCar) => {
+    console.log('converting car, full object:', JSON.stringify(backendCar, null, 2));
+    
+    if (!backendCar) {
+      console.error('invalid car data - null or undefined');
+      return null;
+    }
+    
+    // check if it's already in frontend format (has "name" instead of "vehicle_name")
+    if (backendCar.name && !backendCar.vehicle_name) {
+      console.log('car is already in frontend format, using as-is');
+      // ensure proper ID
+      if (!backendCar.id) {
+        backendCar.id = backendCar.name.replace(/\s+/g, '_');
+      }
+      return backendCar;
+    }
+    
+    // handle backend format with vehicle_name
+    if (!backendCar.vehicle_name) {
+      console.error('invalid car data - missing both name and vehicle_name. Keys:', Object.keys(backendCar || {}));
+      return null;
+    }
+    
+    return {
+      id: backendCar.vehicle_name.replace(/\s+/g, '_'),
+      name: backendCar.vehicle_name,
+      mass: {
+        mass: backendCar.mass || 800,
+        cog_height: backendCar.cg_height || 0.3,
+        wheelbase: backendCar.wheelbase || 3.6,
+        weight_distribution: (backendCar.front_weight_dist || 0.46) * 100
+      },
+      aerodynamics: {
+        Cl: backendCar.lift_coefficient_front || -1.8,
+        Cd: backendCar.drag_coefficient || 0.7,
+        frontal_area: backendCar.frontal_area || 1.6,
+        air_density: backendCar.air_density || 1.225
+      },
+      tire: {
+        mu_x: backendCar.tire_friction_long || 1.8,
+        mu_y: backendCar.tire_friction_lat || 1.9,
+        load_sensitivity: backendCar.tire_load_sensitivity || 0.05,
+        tire_radius: backendCar.tire_radius || 0.33
+      },
+      powertrain: {
+        final_drive: backendCar.final_drive || 2.6,
+        efficiency: backendCar.drivetrain_efficiency || 0.92,
+        max_rpm: backendCar.max_rpm || 15000,
+        min_rpm: backendCar.idle_rpm || 5000,
+        engine_torque_curve: {
+          '11000': backendCar.max_torque || 380
+        }
+      },
+      brake: {
+        max_brake_force: backendCar.max_brake_force || 25000,
+        brake_bias: (backendCar.brake_bias || 0.58) * 100
+      }
+    };
+  };
+
+  // convert frontend format to backend format
+  const convertFrontendToBackend = (frontendCar) => {
+    return {
+      vehicle_name: frontendCar.name,
+      mass: frontendCar.mass.mass,
+      wheelbase: frontendCar.mass.wheelbase,
+      cg_height: frontendCar.mass.cog_height,
+      front_weight_dist: frontendCar.mass.weight_distribution / 100,
+      front_track: 1.6, // default
+      rear_track: 1.58, // default
+      tire_radius: frontendCar.tire.tire_radius,
+      drag_coefficient: frontendCar.aerodynamics.Cd,
+      lift_coefficient_front: frontendCar.aerodynamics.Cl,
+      lift_coefficient_rear: frontendCar.aerodynamics.Cl * 1.2, // estimate
+      frontal_area: frontendCar.aerodynamics.frontal_area,
+      air_density: frontendCar.aerodynamics.air_density,
+      tire_friction_long: frontendCar.tire.mu_x,
+      tire_friction_lat: frontendCar.tire.mu_y,
+      tire_load_sensitivity: frontendCar.tire.load_sensitivity,
+      max_power: 746000.0, // default 1000hp
+      max_torque: frontendCar.powertrain.engine_torque_curve['11000'] || 380,
+      engine_inertia: 0.15, // default
+      drivetrain_efficiency: frontendCar.powertrain.efficiency,
+      max_rpm: frontendCar.powertrain.max_rpm,
+      idle_rpm: frontendCar.powertrain.min_rpm,
+      gear_ratios: [13.2, 10.1, 8.0, 6.5, 5.4, 4.6, 4.0, 3.5], // default F1 ratios
+      final_drive: frontendCar.powertrain.final_drive,
+      shift_time: 0.05, // default
+      brake_bias: frontendCar.brake.brake_bias / 100,
+      max_brake_force: frontendCar.brake.max_brake_force,
+      brake_efficiency: 0.95 // default
+    };
+  };
+
+  const getBlankCar = () => ({
+    id: `new_car_${Date.now()}`,
+    name: 'New Vehicle',
+    mass: { mass: 800, cog_height: 0.3, wheelbase: 3.6, weight_distribution: 46 },
+    aerodynamics: { Cl: -1.8, Cd: 0.7, frontal_area: 1.6, air_density: 1.225 },
+    tire: { mu_x: 1.8, mu_y: 1.9, load_sensitivity: 0.05, tire_radius: 0.33 },
+    powertrain: { final_drive: 2.6, efficiency: 0.92, max_rpm: 15000, min_rpm: 5000, engine_torque_curve: { '11000': 380 } },
+    brake: { max_brake_force: 25000, brake_bias: 58 }
+  });
+
+  // sync form data when user manually selects a different car (not on initial load)
+  useEffect(() => {
+    if (selectedCar && !loading && carFormData) {
+      // only convert if the selected car is different from current form
+      if (selectedCar.vehicle_name !== carFormData.name) {
+        console.log('user selected different car, converting:', selectedCar.vehicle_name);
+        const converted = convertBackendToFrontend(selectedCar);
+        if (converted) {
+          setCarFormData(converted);
+        }
+        setIsCreating(false);
+      }
     }
   }, [selectedCar]);
 
@@ -30,43 +192,90 @@ const CarsPage = ({ cars, setCars, selectedCar, setSelectedCar }) => {
     });
   };
 
-  const handleSaveCar = () => {
-    const existingCarIndex = cars.findIndex(c => c.id === carFormData.id);
-    if (existingCarIndex > -1) {
-      const updatedCars = [...cars];
-      updatedCars[existingCarIndex] = carFormData;
-      setCars(updatedCars);
-    } else {
-      setCars([...cars, carFormData]);
+  const handleSaveCar = async () => {
+    try {
+      setSaving(true);
+      const backendData = convertFrontendToBackend(carFormData);
+      
+      // check if updating or creating
+      const existingCar = cars.find(c => c.vehicle_name === backendData.vehicle_name);
+      
+      if (existingCar && !isCreating) {
+        // update existing car
+        await carsAPI.update(backendData.vehicle_name, backendData);
+      } else {
+        // create new car
+        await carsAPI.create(backendData);
+      }
+      
+      // reload cars from backend
+      await loadCars();
+      setIsCreating(false);
+      
+      alert('car saved successfully!');
+    } catch (error) {
+      console.error('failed to save car:', error);
+      alert('failed to save car: ' + error.message);
+    } finally {
+      setSaving(false);
     }
-    setSelectedCar(carFormData);
-    setIsCreating(false);
   };
 
   const handleCreateNew = () => {
     setSelectedCar(null);
     setIsCreating(true);
+    setCarFormData(getBlankCar());
   };
 
   const handleSelectCar = (car) => {
     setSelectedCar(car);
+    setCarFormData(convertBackendToFrontend(car));
     setIsCreating(false);
   };
 
-  const handleDeleteCar = (carId, e) => {
+  const handleDeleteCar = async (carName, e) => {
     e.stopPropagation();
+    
     if (cars.length <= 1) {
-      alert('You must have at least one car!');
+      alert('need at least one car bro');
       return;
     }
-    const newCars = cars.filter(c => c.id !== carId);
-    setCars(newCars);
-    if (selectedCar?.id === carId) {
-      setSelectedCar(newCars[0]);
+    
+    if (!confirm(`delete ${carName}?`)) {
+      return;
+    }
+    
+    try {
+      await carsAPI.delete(carName);
+      await loadCars();
+    } catch (error) {
+      console.error('failed to delete car:', error);
+      alert('couldnt delete car: ' + error.message);
     }
   };
 
-  if (!carFormData) return null;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 text-cyan-400 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">loading cars from server...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // if no form data yet, show loading
+  if (!carFormData) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 text-cyan-400 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">initializing...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,55 +290,65 @@ const CarsPage = ({ cars, setCars, selectedCar, setSelectedCar }) => {
       {/* Car Selection Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {/* Existing Cars */}
-        {cars.map(car => (
-          <div
-            key={car.id}
-            onClick={() => handleSelectCar(car)}
-            className={`relative group cursor-pointer transition-all duration-300 transform hover:scale-105 ${
-              selectedCar?.id === car.id && !isCreating
-                ? 'ring-2 ring-cyan-500'
-                : ''
-            }`}
-          >
-            <div className="card-gradient h-full p-6 text-center hover:bg-white/10">
-              {/* Delete Button */}
-              {cars.length > 1 && (
+        {cars.filter(car => car && (car.vehicle_name || car.name)).map(car => {
+          const frontendCar = convertBackendToFrontend(car);
+          if (!frontendCar) return null;
+          
+          // get car name from either format
+          const carName = car.vehicle_name || car.name;
+          const carMass = car.mass?.mass || car.mass || 800;
+          const carTorque = car.powertrain?.engine_torque_curve?.['11000'] || car.max_torque || 380;
+          const carDrag = car.aerodynamics?.Cd || car.drag_coefficient || 0.7;
+          const selectedCarName = selectedCar?.vehicle_name || selectedCar?.name;
+          
+          return (
+            <div
+              key={carName}
+              onClick={() => handleSelectCar(car)}
+              className={`relative group cursor-pointer transition-all duration-300 transform hover:scale-105 ${
+                selectedCarName === carName && !isCreating
+                  ? 'ring-2 ring-cyan-500'
+                  : ''
+              }`}
+            >
+              <div className="card-gradient h-full p-6 text-center hover:bg-white/10">
+                {/* Delete Button - always show */}
                 <button
-                  onClick={(e) => handleDeleteCar(car.id, e)}
+                  onClick={(e) => handleDeleteCar(carName, e)}
                   className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-400"
                 >
                   <Trash2 size={16} />
                 </button>
-              )}
-              
-              {/* Car Icon */}
-              <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
-                selectedCar?.id === car.id && !isCreating
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600'
-                  : 'bg-white/10'
-              }`}>
-                <Car className={selectedCar?.id === car.id && !isCreating ? 'text-white' : 'text-cyan-400'} size={32} />
-              </div>
-
-              {/* Car Name */}
-              <h3 className="text-xl font-bold text-white mb-2">{car.name}</h3>
-
-              {/* Quick Stats */}
-              <div className="space-y-1 text-sm text-gray-400">
-                <p>Mass: {car.mass.mass} kg</p>
-                <p>Power: {(car.powertrain.engine_torque_curve['11000'] || 0)} Nm</p>
-                <p>Drag: {car.aerodynamics.Cd}</p>
-              </div>
-
-              {/* Selection Indicator */}
-              {selectedCar?.id === car.id && !isCreating && (
-                <div className="mt-4 text-cyan-400 text-sm font-semibold">
-                  ✓ Selected
+                
+                {/* Car Icon */}
+                <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                  selectedCarName === carName && !isCreating
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600'
+                    : 'bg-white/10'
+                }`}>
+                  <Car className={selectedCarName === carName && !isCreating ? 'text-white' : 'text-cyan-400'} size={32} />
                 </div>
-              )}
+
+                {/* Car Name */}
+                <h3 className="text-xl font-bold text-white mb-2">{carName}</h3>
+
+                {/* Quick Stats */}
+                <div className="space-y-1 text-sm text-gray-400">
+                  <p>Mass: {carMass} kg</p>
+                  <p>Torque: {carTorque} Nm</p>
+                  <p>Drag: {carDrag}</p>
+                </div>
+
+                {/* Selection Indicator */}
+                {selectedCarName === carName && !isCreating && (
+                  <div className="mt-4 text-cyan-400 text-sm font-semibold">
+                    ✓ Selected
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Create New Car Card */}
         <div
@@ -158,7 +377,7 @@ const CarsPage = ({ cars, setCars, selectedCar, setSelectedCar }) => {
       </div>
 
       {/* Editor Section */}
-      {(selectedCar || isCreating) && (
+      {(selectedCar || isCreating) && carFormData && (
         <div className="card-gradient">
           <div className="flex justify-between items-center mb-6 pb-4 border-b border-white/10">
             <div>
@@ -171,10 +390,11 @@ const CarsPage = ({ cars, setCars, selectedCar, setSelectedCar }) => {
             </div>
             <button
               onClick={handleSaveCar}
-              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white transition-all font-semibold shadow-lg shadow-cyan-500/30 transform hover:scale-105"
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white transition-all font-semibold shadow-lg shadow-cyan-500/30 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save size={18} />
-              {isCreating ? 'Create Vehicle' : 'Save Changes'}
+              {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
+              {saving ? 'Saving...' : (isCreating ? 'Create Vehicle' : 'Save Changes')}
             </button>
           </div>
 

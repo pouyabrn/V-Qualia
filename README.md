@@ -1,10 +1,74 @@
-# V-Qualia 🏎️
+# V-Qualia 
 
 > Professional telemetry analysis platform for racing data
 
 ---
 
-## Frontend 💻
+## Backend 
+
+The backend API was written from scratch, focusing on performance and simplicity. I chose **FastAPI** for its blazing-fast async capabilities and automatic API documentation. The core engine and API directory structure were all hand-coded, then **Claude AI** was used to create the frontend and connect everything together seamlessly.
+
+### Tech Stack
+
+**Framework:**
+- **FastAPI** - Modern, high-performance Python web framework
+- **Uvicorn** - Lightning-fast ASGI server
+- **Python 3.10+** - Async/await support
+
+**Data Processing:**
+- **Pandas** - Data manipulation and CSV handling
+- **NumPy** - Numerical computations
+- **FastF1** - Formula 1 telemetry data parsing
+- **Matplotlib** - Data visualization backend
+
+**API Features:**
+- RESTful endpoints with automatic validation
+- CORS enabled for frontend communication
+- File upload/download support (multipart)
+- Simple authentication system (placeholder token)
+- JSON-based vehicle and track storage
+
+### Architecture
+
+**Directories:**
+- `backend/data/cars/` - Vehicle configuration files (JSON)
+- `backend/data/tracks/` - Track data files (CSV)
+- `backend/data/predictions/` - Simulation outputs (CSV)
+
+**API Endpoints:**
+- `/api/cars` - CRUD operations for vehicle configurations
+- `/api/tracks` - Track management and upload
+- `/api/predictions` - Lap simulation results
+- Auto-generated docs at `/docs` (Swagger UI)
+
+### Dependencies
+
+```txt
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+python-multipart>=0.0.6
+python-dotenv>=1.0.0
+requests>=2.28.0
+fastf1>=3.6.0
+matplotlib>=3.5.0
+pandas>=1.3.0
+numpy>=1.21.0
+```
+
+### Running the Backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+API available at `http://localhost:8000`
+Interactive docs at `http://localhost:8000/docs`
+
+---
+
+## Frontend 
 
 This frontend was completely **vibe-coded** by someone who doesn't know anything about frontend development. Thanks to the amazing communities at **shadcn/ui** and **React Bits** for the inspiration and components that made this possible!
 
@@ -93,15 +157,26 @@ This frontend was completely **vibe-coded** by someone who doesn't know anything
 
 ### Dependencies
 
+**Production:**
 ```json
 {
-  "react": "^18.x",
-  "react-dom": "^18.x",
-  "vite": "^5.x",
-  "tailwindcss": "^3.x",
-  "recharts": "^2.x",
-  "lucide-react": "latest",
-  "papaparse": "^5.x"
+  "react": "^18.2.0",
+  "react-dom": "^18.2.0",
+  "recharts": "^2.10.3",
+  "lucide-react": "^0.294.0",
+  "papaparse": "^5.5.3"
+}
+```
+
+**Development:**
+```json
+{
+  "vite": "^5.0.8",
+  "tailwindcss": "^3.3.6",
+  "@vitejs/plugin-react": "^4.2.1",
+  "autoprefixer": "^10.4.16",
+  "postcss": "^8.4.32",
+  "eslint": "^8.55.0"
 }
 ```
 

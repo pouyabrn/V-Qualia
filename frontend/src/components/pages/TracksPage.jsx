@@ -1,27 +1,150 @@
-import { useState } from 'react';
-import { Plus, Trash2, Target, Upload, Map } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, Target, Upload, Map, RefreshCw } from 'lucide-react';
 import { ResponsiveContainer, ScatterChart, XAxis, YAxis, Tooltip, Scatter } from 'recharts';
+import { tracksAPI } from '../../utils/api';
+import Papa from 'papaparse';
 
-const TracksPage = ({ tracks, setTracks, selectedTrack, setSelectedTrack, onTrackUpload }) => {
-  const [previewTrack, setPreviewTrack] = useState(selectedTrack);
+const TracksPage = () => {
+  const [tracks, setTracks] = useState([]);
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [previewTrack, setPreviewTrack] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
-  const handleDeleteTrack = (trackId, e) => {
-    e.stopPropagation();
-    if (tracks.length <= 1) {
-      alert('You must have at least one track!');
-      return;
-    }
-    const newTracks = tracks.filter(t => t.id !== trackId);
-    setTracks(newTracks);
-    if (selectedTrack?.id === trackId) {
-      setSelectedTrack(newTracks[0]);
-      setPreviewTrack(newTracks[0]);
+  // load tracks from backend on mount
+  useEffect(() => {
+    loadTracks();
+  }, []);
+
+  const loadTracks = async () => {
+    try {
+      setLoading(true);
+      const response = await tracksAPI.getAll();
+      setTracks(response.tracks || []);
+      
+      // auto-select first track
+      if (response.tracks && response.tracks.length > 0) {
+        await loadTrackData(response.tracks[0]);
+      }
+    } catch (error) {
+      console.error('failed to load tracks:', error);
+      alert('couldnt load tracks from server: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSelectTrack = (track) => {
-    setSelectedTrack(track);
-    setPreviewTrack(track);
+  const loadTrackData = async (track) => {
+    try {
+      const response = await tracksAPI.get(track.track_name);
+      
+      // try to detect column names (case insensitive)
+      const firstRow = response.data[0] || {};
+      const columns = response.columns || Object.keys(firstRow);
+      
+      // find x and y columns
+      const xCol = columns.find(c => c.toLowerCase().includes('x'));
+      const yCol = columns.find(c => c.toLowerCase().includes('y'));
+      const sCol = columns.find(c => c.toLowerCase().includes('s'));
+      
+      console.log('track columns:', columns);
+      console.log('using columns:', { x: xCol, y: yCol, s: sCol });
+      
+      // convert backend data to frontend format
+      const trackData = {
+        id: track.track_name.replace(/\s+/g, '_'),
+        name: track.track_name,
+        data: response.data.map(row => ({
+          x: parseFloat(row[xCol]) || 0,
+          y: parseFloat(row[yCol]) || 0,
+          s: parseFloat(row[sCol]) || 0
+        }))
+      };
+      
+      console.log('loaded track data:', trackData.data.slice(0, 5));
+      
+      setSelectedTrack(trackData);
+      setPreviewTrack(trackData);
+    } catch (error) {
+      console.error('failed to load track data:', error);
+    }
+  };
+
+  const handleDeleteTrack = async (trackName, e) => {
+    e.stopPropagation();
+    
+    if (tracks.length <= 1) {
+      alert('need at least one track bro');
+      return;
+    }
+    
+    if (!confirm(`delete ${trackName}?`)) {
+      return;
+    }
+    
+    try {
+      await tracksAPI.delete(trackName);
+      await loadTracks();
+    } catch (error) {
+      console.error('failed to delete track:', error);
+      alert('couldnt delete track: ' + error.message);
+    }
+  };
+
+  const handleSelectTrack = async (track) => {
+    await loadTrackData(track);
+  };
+
+  const handleTrackUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    
+    // first parse the csv to validate it
+    Papa.parse(file, {
+      header: true,
+      complete: async (results) => {
+        try {
+          // check if csv has required columns
+          const headers = results.meta.fields;
+          const hasXColumn = headers.some(h => h.toLowerCase().includes('x'));
+          const hasYColumn = headers.some(h => h.toLowerCase().includes('y'));
+          
+          if (!hasXColumn || !hasYColumn) {
+            alert('csv needs x and y columns for track coordinates');
+            setUploading(false);
+            return;
+          }
+
+          // ask for track name
+          const trackName = prompt('enter track name:', file.name.replace('.csv', ''));
+          if (!trackName) {
+            setUploading(false);
+            return;
+          }
+
+          // upload to backend
+          await tracksAPI.upload(trackName, file);
+          alert('track uploaded successfully!');
+          
+          // reload tracks
+          await loadTracks();
+        } catch (error) {
+          console.error('upload failed:', error);
+          alert('failed to upload track: ' + error.message);
+        } finally {
+          setUploading(false);
+          e.target.value = '';
+        }
+      },
+      error: (error) => {
+        console.error('csv parse error:', error);
+        alert('invalid csv file');
+        setUploading(false);
+        e.target.value = '';
+      }
+    });
   };
 
   const getTrackStats = (track) => {
@@ -29,7 +152,7 @@ const TracksPage = ({ tracks, setTracks, selectedTrack, setSelectedTrack, onTrac
       return { points: 0, length: 0 };
     }
 
-    // Calculate approximate track length
+    // calculate approximate track length
     let totalLength = 0;
     for (let i = 1; i < track.data.length; i++) {
       const dx = track.data[i].x - track.data[i - 1].x;
@@ -39,9 +162,20 @@ const TracksPage = ({ tracks, setTracks, selectedTrack, setSelectedTrack, onTrac
 
     return {
       points: track.data.length,
-      length: (totalLength / 1000).toFixed(2) // Convert to km
+      length: (totalLength / 1000).toFixed(2) // convert to km
     };
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 text-cyan-400 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">loading tracks from server...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -56,87 +190,81 @@ const TracksPage = ({ tracks, setTracks, selectedTrack, setSelectedTrack, onTrac
       {/* Track Selection Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {/* Existing Tracks */}
-        {tracks.map(track => {
-          const stats = getTrackStats(track);
-          return (
-            <div
-              key={track.id}
-              onClick={() => handleSelectTrack(track)}
-              className={`relative group cursor-pointer transition-all duration-300 transform hover:scale-105 ${
-                selectedTrack?.id === track.id ? 'ring-2 ring-cyan-500' : ''
-              }`}
-            >
-              <div className="card-gradient h-full p-6 text-center hover:bg-white/10">
-                {/* Delete Button */}
-                {tracks.length > 1 && (
-                  <button
-                    onClick={(e) => handleDeleteTrack(track.id, e)}
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-400"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-
-                {/* Track Icon */}
-                <div
-                  className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
-                    selectedTrack?.id === track.id
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600'
-                      : 'bg-white/10'
-                  }`}
+        {tracks.map(track => (
+          <div
+            key={track.track_name}
+            onClick={() => handleSelectTrack(track)}
+            className={`relative group cursor-pointer transition-all duration-300 transform hover:scale-105 ${
+              selectedTrack?.name === track.track_name ? 'ring-2 ring-cyan-500' : ''
+            }`}
+          >
+            <div className="card-gradient h-full p-6 text-center hover:bg-white/10">
+              {/* Delete Button */}
+              {tracks.length > 1 && (
+                <button
+                  onClick={(e) => handleDeleteTrack(track.track_name, e)}
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-400"
                 >
-                  <Map
-                    className={selectedTrack?.id === track.id ? 'text-white' : 'text-cyan-400'}
-                    size={32}
-                  />
-                </div>
+                  <Trash2 size={16} />
+                </button>
+              )}
 
-                {/* Track Name */}
-                <h3 className="text-xl font-bold text-white mb-2">{track.name}</h3>
-
-                {/* Quick Stats */}
-                <div className="space-y-1 text-sm text-gray-400">
-                  <p>Length: ~{stats.length} km</p>
-                  <p>Data Points: {stats.points}</p>
-                </div>
-
-                {/* Mini Preview */}
-                <div className="mt-4 h-20 rounded-lg bg-black/20 overflow-hidden">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                      <XAxis type="number" dataKey="x" hide />
-                      <YAxis type="number" dataKey="y" hide />
-                      <Scatter
-                        data={track.data}
-                        line={{ stroke: selectedTrack?.id === track.id ? '#06b6d4' : '#4b5563', strokeWidth: 2 }}
-                        shape={() => null}
-                      />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Selection Indicator */}
-                {selectedTrack?.id === track.id && (
-                  <div className="mt-4 text-cyan-400 text-sm font-semibold">✓ Selected</div>
-                )}
+              {/* Track Icon */}
+              <div
+                className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                  selectedTrack?.name === track.track_name
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600'
+                    : 'bg-white/10'
+                }`}
+              >
+                <Map
+                  className={selectedTrack?.name === track.track_name ? 'text-white' : 'text-cyan-400'}
+                  size={32}
+                />
               </div>
+
+              {/* Track Name */}
+              <h3 className="text-xl font-bold text-white mb-2">{track.track_name}</h3>
+
+              {/* Quick Stats */}
+              <div className="space-y-1 text-sm text-gray-400">
+                <p>Length: ~{track.length ? (track.length / 1000).toFixed(2) : '0.00'} km</p>
+                <p>Data Points: {track.data_points || 0}</p>
+              </div>
+
+              {/* Selection Indicator */}
+              {selectedTrack?.name === track.track_name && (
+                <div className="mt-4 text-cyan-400 text-sm font-semibold">✓ Selected</div>
+              )}
             </div>
-          );
-        })}
+          </div>
+        ))}
 
         {/* Upload New Track Card */}
         <label
-          className="cursor-pointer transition-all duration-300 transform hover:scale-105"
+          className={`cursor-pointer transition-all duration-300 transform hover:scale-105 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
         >
           <div className="card-gradient h-full p-6 text-center hover:bg-white/10 flex flex-col justify-center items-center min-h-[320px] border-2 border-dashed border-cyan-500/30 hover:border-cyan-500">
             <div className="w-16 h-16 mb-4 rounded-full flex items-center justify-center bg-white/10">
-              <Plus className="text-cyan-400" size={32} />
+              {uploading ? (
+                <RefreshCw className="text-cyan-400 animate-spin" size={32} />
+              ) : (
+                <Plus className="text-cyan-400" size={32} />
+              )}
             </div>
             <Upload className="text-cyan-400 mb-2" size={24} />
-            <h3 className="text-xl font-bold text-cyan-400 mb-2">Upload New Track</h3>
+            <h3 className="text-xl font-bold text-cyan-400 mb-2">
+              {uploading ? 'Uploading...' : 'Upload New Track'}
+            </h3>
             <p className="text-sm text-gray-400">Add track layout from CSV</p>
           </div>
-          <input type="file" accept=".csv" onChange={onTrackUpload} className="hidden" />
+          <input 
+            type="file" 
+            accept=".csv" 
+            onChange={handleTrackUpload} 
+            className="hidden" 
+            disabled={uploading}
+          />
         </label>
       </div>
 

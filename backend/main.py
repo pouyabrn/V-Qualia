@@ -1,319 +1,413 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
 import uvicorn
 import os
-from typing import Optional, List
-import logging
-import fastf1
+import json
 import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
+from typing import Optional, List
 from datetime import datetime
-import io
+from pydantic import BaseModel
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# yeah we just pretend auth exists for now lol
+PLACEHOLDER_AUTH = "ididntwriteauthsystemyetLOL"
 
-# Initialize FastAPI app
+# setup data directories
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+CARS_DIR = os.path.join(DATA_DIR, "cars")
+TRACKS_DIR = os.path.join(DATA_DIR, "tracks")
+PREDICTIONS_DIR = os.path.join(DATA_DIR, "predictions")
+
+# make sure directories exist
+for directory in [DATA_DIR, CARS_DIR, TRACKS_DIR, PREDICTIONS_DIR]:
+    os.makedirs(directory, exist_ok=True)
+
 app = FastAPI(
-    title="V-Qualia Analysis API",
-    description="A FastAPI server for F1 data analysis and racing telemetry",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="V-Qualia API",
+    description="Backend for V-Qualia telemetry platform",
+    version="2.0.0"
 )
 
-
-# CORS middleware
+# let frontend talk to us
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Frontend URLs
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Trusted host middleware
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["*"]  # Development phase only
-)
+# models for request/response
+class CarConfig(BaseModel):
+    vehicle_name: str
+    mass: float
+    wheelbase: float
+    cg_height: float
+    front_weight_dist: float
+    front_track: float
+    rear_track: float
+    tire_radius: float
+    drag_coefficient: float
+    lift_coefficient_front: float
+    lift_coefficient_rear: float
+    frontal_area: float
+    air_density: float
+    tire_friction_long: float
+    tire_friction_lat: float
+    tire_load_sensitivity: float
+    max_power: float
+    max_torque: float
+    engine_inertia: float
+    drivetrain_efficiency: float
+    max_rpm: float
+    idle_rpm: float
+    gear_ratios: List[float]
+    final_drive: float
+    shift_time: float
+    brake_bias: float
+    max_brake_force: float
+    brake_efficiency: float
 
+class TrackInfo(BaseModel):
+    track_name: str
+    length: Optional[float] = None
+    data_points: Optional[int] = None
 
-# Simple API key authentication
-API_KEY = os.getenv("API_KEY", "api_key")
+# check if auth token is legit (spoiler: we just check if it matches our placeholder)
+def verify_auth(authorization: str = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="no auth token bro")
+    
+    token = authorization.replace("Bearer ", "").strip()
+    if token != PLACEHOLDER_AUTH:
+        raise HTTPException(status_code=401, detail="wrong token buddy")
+    
+    return token
 
-def verify_api_key(api_key: str = Query(..., description="API Key for authentication")):
-    """Verify API key for authentication"""
-    if api_key != API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API key. Please provide a valid API key as a query parameter."
-        )
-    return api_key
-
-
+# basic health check
 @app.get("/")
 async def root():
-    """Root endpoint - health check"""
     return {
-        "message": "V-Qualia Analysis API is running",
-        "status": "healthy",
-        "version": "1.0.0"
+        "message": "V-Qualia API is alive",
+        "version": "2.0.0",
+        "status": "running"
     }
-
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "V-Qualia Analysis API"
-    }
+async def health():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
+# === CAR ENDPOINTS ===
 
-@app.get("/api/v1/status")
-async def api_status(api_key: str = Depends(verify_api_key)):
-    """Protected endpoint that requires API key"""
-    return {
-        "message": "API is working correctly",
-        "authenticated": True,
-        "timestamp": datetime.now().isoformat(),
-        "api_key_provided": True
-    }
-
-
-@app.post("/api/v1/analyze")
-async def analyze_data(
-    data: dict,
-    api_key: str = Depends(verify_api_key)
-):
-    """Endpoint for data analysis"""
-    logger.info(f"Analysis request received: {len(data)} items")
+@app.get("/api/cars")
+async def get_cars(auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
     
-    analysis_result = {
-        "status": "success",
-        "message": "Data analysis completed",
-        "data_points": len(data) if isinstance(data, (list, dict)) else 1,
-        "timestamp": datetime.now().isoformat(),
-        "authenticated": True
-    }
+    cars = []
+    for filename in os.listdir(CARS_DIR):
+        if filename.endswith(".json"):
+            with open(os.path.join(CARS_DIR, filename), "r") as f:
+                car_data = json.load(f)
+                cars.append(car_data)
     
-    return analysis_result
+    return {"success": True, "cars": cars, "count": len(cars)}
 
+@app.get("/api/cars/{car_name}")
+async def get_car(car_name: str, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    # replace spaces with underscores for filename
+    filename = f"{car_name.replace(' ', '_')}.json"
+    filepath = os.path.join(CARS_DIR, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail=f"car '{car_name}' not found")
+    
+    with open(filepath, "r") as f:
+        car_data = json.load(f)
+    
+    return {"success": True, "car": car_data}
 
-@app.get("/api/v1/f1/telemetry")
-async def get_f1_telemetry(
-    year: int = Query(2024, description="F1 season year (2018-2024)"),
-    race: str = Query("Monaco", description="Race name"),
-    session: str = Query("R", description="Session type: FP1, FP2, FP3, Q, R (Race)"),
-    driver: Optional[str] = Query(None, description="Driver abbreviation"),
-    api_key: str = Depends(verify_api_key)
-):
-    """Get F1 telemetry data"""
+@app.post("/api/cars")
+async def create_car(car: CarConfig, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    # save as json file
+    filename = f"{car.vehicle_name.replace(' ', '_')}.json"
+    filepath = os.path.join(CARS_DIR, filename)
+    
+    # check if car already exists
+    if os.path.exists(filepath):
+        raise HTTPException(status_code=400, detail=f"car '{car.vehicle_name}' already exists")
+    
+    car_data = car.dict()
+    car_data["created_at"] = datetime.now().isoformat()
+    car_data["updated_at"] = datetime.now().isoformat()
+    
+    with open(filepath, "w") as f:
+        json.dump(car_data, f, indent=2)
+    
+    return {"success": True, "message": f"car '{car.vehicle_name}' created", "car": car_data}
+
+@app.put("/api/cars/{car_name}")
+async def update_car(car_name: str, car: CarConfig, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    filename = f"{car_name.replace(' ', '_')}.json"
+    filepath = os.path.join(CARS_DIR, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail=f"car '{car_name}' not found")
+    
+    # load existing data to keep created_at
+    with open(filepath, "r") as f:
+        existing_data = json.load(f)
+    
+    car_data = car.dict()
+    car_data["created_at"] = existing_data.get("created_at", datetime.now().isoformat())
+    car_data["updated_at"] = datetime.now().isoformat()
+    
+    with open(filepath, "w") as f:
+        json.dump(car_data, f, indent=2)
+    
+    return {"success": True, "message": f"car '{car_name}' updated", "car": car_data}
+
+@app.delete("/api/cars/{car_name}")
+async def delete_car(car_name: str, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    filename = f"{car_name.replace(' ', '_')}.json"
+    filepath = os.path.join(CARS_DIR, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail=f"car '{car_name}' not found")
+    
+    # actually delete the file, no mercy
     try:
-        logger.info(f"Fetching F1 telemetry for {year} {race} {session}")
-        
-        fastf1.Cache.set_disabled()
-        
-        session_obj = fastf1.get_session(year, race, session)
-        session_obj.load()
-        
-        if driver:
-            driver_data = session_obj.laps.pick_driver(driver)
-            if driver_data.empty:
-                raise HTTPException(
-                    status_code=404, 
-                    detail=f"Driver {driver} not found in {year} {race} {session}"
-                )
-            
-            telemetry = driver_data.get_car_data()
-            telemetry_data = {
-                "driver": driver,
-                "laps": len(driver_data),
-                "telemetry_points": len(telemetry),
-                "data": {
-                    "speed": telemetry['Speed'].tolist()[:100],
-                    "rpm": telemetry['RPM'].tolist()[:100],
-                    "gear": telemetry['nGear'].tolist()[:100],
-                    "throttle": telemetry['Throttle'].tolist()[:100],
-                    "brake": telemetry['Brake'].tolist()[:100],
-                    "time": [str(t) for t in telemetry['Time'].tolist()[:100]]
-                }
-            }
-        else:
-            all_laps = session_obj.laps
-            telemetry_data = {
-                "session_info": {
-                    "year": year,
-                    "race": race,
-                    "session": session,
-                    "total_laps": len(all_laps),
-                    "drivers": all_laps['Driver'].unique().tolist()
-                },
-                "drivers_data": []
-            }
-            
-            for driver_name in all_laps['Driver'].unique()[:3]:
-                driver_laps = all_laps.pick_driver(driver_name)
-                if not driver_laps.empty:
-                    driver_telemetry = driver_laps.get_car_data()
-                    telemetry_data["drivers_data"].append({
-                        "driver": driver_name,
-                        "laps": len(driver_laps),
-                        "telemetry_points": len(driver_telemetry),
-                        "data": {
-                            "speed": driver_telemetry['Speed'].tolist()[:50],
-                            "rpm": driver_telemetry['RPM'].tolist()[:50],
-                            "gear": driver_telemetry['nGear'].tolist()[:50],
-                            "throttle": driver_telemetry['Throttle'].tolist()[:50],
-                            "brake": driver_telemetry['Brake'].tolist()[:50]
-                        }
-                    })
-        
-        return {
-            "status": "success",
-            "message": f"F1 telemetry data retrieved for {year} {race} {session}",
-            "timestamp": datetime.now().isoformat(),
-            "data": telemetry_data
-        }
-        
+        os.remove(filepath)
+        # double check it's really gone
+        if os.path.exists(filepath):
+            raise Exception("file still exists after delete attempt")
     except Exception as e:
-        logger.error(f"Error fetching F1 telemetry: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching F1 telemetry data: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"failed to delete file: {str(e)}")
+    
+    return {"success": True, "message": f"car '{car_name}' permanently deleted", "deleted": True}
 
+# === TRACK ENDPOINTS ===
 
-@app.get("/api/v1/f1/sessions")
-async def get_f1_sessions(
-    year: int = Query(2024, description="F1 season year"),
-    api_key: str = Depends(verify_api_key)
-):
-    """Get F1 sessions for a given year"""
-    try:
-        logger.info(f"Fetching F1 sessions for {year}")
-        
-        fastf1.Cache.set_disabled()
-        
-        schedule = fastf1.get_event_schedule(year)
-        
-        sessions_data = []
-        for _, event in schedule.iterrows():
-            sessions_data.append({
-                "race_name": event['EventName'],
-                "location": event['Location'],
-                "country": event['Country'],
-                "date": str(event['EventDate']),
-                "sessions": ["FP1", "FP2", "FP3", "Q", "R"]
-            })
-        
-        return {
-            "status": "success",
-            "message": f"F1 sessions for {year}",
-            "timestamp": datetime.now().isoformat(),
-            "year": year,
-            "total_races": len(sessions_data),
-            "sessions": sessions_data
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching F1 sessions: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching F1 sessions: {str(e)}"
-        )
-
-
-@app.post("/api/v1/f1/telemetry/visualize")
-async def visualize_f1_telemetry(data: dict, api_key: str = Depends(verify_api_key)):
-    """Generate F1 telemetry visualization from JSON data"""
-    try:
-        logger.info("Generating F1 telemetry visualization")
-        
-        telemetry_data = data['data']['data']
-        
-        brake_data = [100 if brake else 0 for brake in telemetry_data['brake']]
-        
-        def time_to_seconds(time_str):
+@app.get("/api/tracks")
+async def get_tracks(auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    tracks = []
+    for filename in os.listdir(TRACKS_DIR):
+        if filename.endswith(".csv"):
+            filepath = os.path.join(TRACKS_DIR, filename)
+            track_name = filename.replace(".csv", "").replace("_", " ")
+            
+            # read csv to get some basic info
             try:
-                if 'days' in time_str:
-                    dt = pd.to_timedelta(time_str)
-                    return dt.total_seconds()
-                elif ':' in time_str:
-                    parts = time_str.split(':')
-                    if len(parts) == 3:
-                        hours, minutes, seconds = parts
-                        return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-                else:
-                    return float(time_str)
-            except:
-                return 0
-        
-        time_seconds = [time_to_seconds(t) for t in telemetry_data['time']]
-        
-        fig, axes = plt.subplots(5, 1, figsize=(12, 16), sharex=True)
-        fig.suptitle(f'F1 Telemetry - {data["data"]["driver"]}', fontsize=16, fontweight='bold')
-        
-        axes[0].plot(time_seconds, telemetry_data['speed'], 'b-', linewidth=1.5)
-        axes[0].set_ylabel('Speed (km/h)', fontsize=12)
-        axes[0].set_title('Speed vs Time', fontsize=14, fontweight='bold')
-        axes[0].grid(True, alpha=0.3)
-        axes[0].set_ylim(0, None)
-        
-        axes[1].plot(time_seconds, telemetry_data['rpm'], 'r-', linewidth=1.5)
-        axes[1].set_ylabel('RPM', fontsize=12)
-        axes[1].set_title('RPM vs Time', fontsize=14, fontweight='bold')
-        axes[1].grid(True, alpha=0.3)
-        axes[1].set_ylim(0, None)
-        
-        axes[2].step(time_seconds, telemetry_data['gear'], 'g-', linewidth=2, where='post')
-        axes[2].set_ylabel('Gear', fontsize=12)
-        axes[2].set_title('Gear vs Time', fontsize=14, fontweight='bold')
-        axes[2].grid(True, alpha=0.3)
-        axes[2].set_ylim(0.5, max(telemetry_data['gear']) + 0.5)
-        axes[2].set_yticks(range(1, max(telemetry_data['gear']) + 1))
-        
-        axes[3].plot(time_seconds, telemetry_data['throttle'], 'orange', linewidth=1.5)
-        axes[3].set_ylabel('Throttle (%)', fontsize=12)
-        axes[3].set_title('Throttle vs Time', fontsize=14, fontweight='bold')
-        axes[3].grid(True, alpha=0.3)
-        axes[3].set_ylim(0, 100)
-        
-        axes[4].step(time_seconds, brake_data, 'purple', linewidth=2, where='post')
-        axes[4].set_ylabel('Brake (%)', fontsize=12)
-        axes[4].set_title('Brake vs Time', fontsize=14, fontweight='bold')
-        axes[4].set_xlabel('Time (seconds)', fontsize=12)
-        axes[4].grid(True, alpha=0.3)
-        axes[4].set_ylim(0, 100)
-        
-        plt.tight_layout()
-        
-        img_buffer = io.BytesIO()
-        plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
-        img_buffer.seek(0)
-        plt.close()
-        
-        return StreamingResponse(img_buffer, media_type="image/png")
-        
+                df = pd.read_csv(filepath)
+                track_info = {
+                    "track_name": track_name,
+                    "filename": filename,
+                    "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
+                    "data_points": len(df),
+                    "created_at": datetime.fromtimestamp(os.path.getctime(filepath)).isoformat()
+                }
+                tracks.append(track_info)
+            except Exception as e:
+                # if csv is messed up just skip it
+                continue
+    
+    return {"success": True, "tracks": tracks, "count": len(tracks)}
+
+@app.get("/api/tracks/{track_name}")
+async def get_track(track_name: str, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    filename = f"{track_name.replace(' ', '_')}.csv"
+    filepath = os.path.join(TRACKS_DIR, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail=f"track '{track_name}' not found")
+    
+    # read and return csv data
+    df = pd.read_csv(filepath)
+    
+    return {
+        "success": True,
+        "track_name": track_name,
+        "data": df.to_dict(orient='records'),
+        "columns": list(df.columns),
+        "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
+        "data_points": len(df)
+    }
+
+@app.post("/api/tracks/upload")
+async def upload_track(
+    track_name: str,
+    file: UploadFile = File(...),
+    auth: str = Header(None, alias="Authorization")
+):
+    verify_auth(auth)
+    
+    # make sure it's a csv
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="only csv files allowed")
+    
+    filename = f"{track_name.replace(' ', '_')}.csv"
+    filepath = os.path.join(TRACKS_DIR, filename)
+    
+    # check if track already exists
+    if os.path.exists(filepath):
+        raise HTTPException(status_code=400, detail=f"track '{track_name}' already exists")
+    
+    # save the file
+    contents = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(contents)
+    
+    # validate it's actually a proper csv
+    try:
+        df = pd.read_csv(filepath)
+        track_info = {
+            "track_name": track_name,
+            "filename": filename,
+            "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
+            "data_points": len(df),
+            "columns": list(df.columns)
+        }
     except Exception as e:
-        logger.error(f"Error generating visualization: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error generating visualization: {str(e)}"
-        )
+        # if csv is broken delete it
+        os.remove(filepath)
+        raise HTTPException(status_code=400, detail=f"invalid csv file: {str(e)}")
+    
+    return {"success": True, "message": f"track '{track_name}' uploaded", "track": track_info}
 
+@app.delete("/api/tracks/{track_name}")
+async def delete_track(track_name: str, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    filename = f"{track_name.replace(' ', '_')}.csv"
+    filepath = os.path.join(TRACKS_DIR, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail=f"track '{track_name}' not found")
+    
+    # nuke it from existence
+    try:
+        os.remove(filepath)
+        # make sure it's actually gone
+        if os.path.exists(filepath):
+            raise Exception("track file still exists somehow")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to delete track: {str(e)}")
+    
+    return {"success": True, "message": f"track '{track_name}' obliterated", "deleted": True}
 
+# === PREDICTION ENDPOINTS (for later when we connect the engine) ===
+
+@app.get("/api/predictions")
+async def get_predictions(auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    predictions = []
+    for filename in os.listdir(PREDICTIONS_DIR):
+        if filename.endswith(".csv"):
+            filepath = os.path.join(PREDICTIONS_DIR, filename)
+            predictions.append({
+                "filename": filename,
+                "created_at": datetime.fromtimestamp(os.path.getctime(filepath)).isoformat(),
+                "size": os.path.getsize(filepath)
+            })
+    
+    return {"success": True, "predictions": predictions, "count": len(predictions)}
+
+@app.get("/api/predictions/{filename}")
+async def get_prediction(filename: str, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    filepath = os.path.join(PREDICTIONS_DIR, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="prediction not found")
+    
+    return FileResponse(filepath, media_type="text/csv", filename=filename)
+
+@app.delete("/api/predictions/{filename}")
+async def delete_prediction(filename: str, auth: str = Header(None, alias="Authorization")):
+    verify_auth(auth)
+    
+    filepath = os.path.join(PREDICTIONS_DIR, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="prediction not found")
+    
+    # yeet it into the void
+    try:
+        os.remove(filepath)
+        if os.path.exists(filepath):
+            raise Exception("prediction file refuses to die")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"couldnt delete prediction: {str(e)}")
+    
+    return {"success": True, "message": f"prediction '{filename}' deleted permanently", "deleted": True}
+
+# === ADMIN / CLEANUP ENDPOINTS ===
+
+@app.post("/api/cleanup")
+async def cleanup_all_data(auth: str = Header(None, alias="Authorization")):
+    """nuclear option - delete EVERYTHING (use with caution)"""
+    verify_auth(auth)
+    
+    deleted = {"cars": 0, "tracks": 0, "predictions": 0}
+    errors = []
+    
+    # clean cars
+    try:
+        for filename in os.listdir(CARS_DIR):
+            if filename.endswith(".json"):
+                filepath = os.path.join(CARS_DIR, filename)
+                os.remove(filepath)
+                deleted["cars"] += 1
+    except Exception as e:
+        errors.append(f"cars cleanup error: {str(e)}")
+    
+    # clean tracks
+    try:
+        for filename in os.listdir(TRACKS_DIR):
+            if filename.endswith(".csv"):
+                filepath = os.path.join(TRACKS_DIR, filename)
+                os.remove(filepath)
+                deleted["tracks"] += 1
+    except Exception as e:
+        errors.append(f"tracks cleanup error: {str(e)}")
+    
+    # clean predictions
+    try:
+        for filename in os.listdir(PREDICTIONS_DIR):
+            if filename.endswith(".csv"):
+                filepath = os.path.join(PREDICTIONS_DIR, filename)
+                os.remove(filepath)
+                deleted["predictions"] += 1
+    except Exception as e:
+        errors.append(f"predictions cleanup error: {str(e)}")
+    
+    return {
+        "success": len(errors) == 0,
+        "message": "cleanup complete" if len(errors) == 0 else "cleanup had some issues",
+        "deleted": deleted,
+        "total_deleted": sum(deleted.values()),
+        "errors": errors if errors else None
+    }
+
+# run the thing
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
-        log_level="info"
+        reload=True
     )
-
