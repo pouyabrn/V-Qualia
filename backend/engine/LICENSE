@@ -1,0 +1,51 @@
+GNU LESSER GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2025 Pouya Baroon (pouyabrn@yahoo.com)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+This project uses the quasi-steady-state lap time simulation algorithm
+inspired by research from TUM Fast Technology Munich (TUMFTM), whose
+original implementations are licensed under LGPL-3.0.
+
+By using LGPL-3.0 for this project, we maintain compatibility with
+TUMFTM's licensing while respecting their excellent research and
+open-source contributions.
+
+For the full text of the GNU Lesser General Public License v3.0, visit:
+https://www.gnu.org/licenses/lgpl-3.0.en.html
+
+---
+
+ACADEMIC ATTRIBUTION:
+
+This implementation is based on research from:
+
+Christ, F., Wischnewski, A., Heilmeier, A., & Lohmann, B. (2019).
+"Time-Optimal Trajectory Planning for a Race Car Considering Variable 
+Tyre-Road Friction Coefficients." Vehicle System Dynamics, 59(4), 588-612.
+DOI: 10.1080/00423114.2019.1704804
+
+Heilmeier, A., Graf, M., & Lienkamp, M. (2018).
+"A Race Simulation for Strategy Decisions in Circuit Motorsports."
+2018 21st International Conference on Intelligent Transportation Systems (ITSC).
+DOI: 10.1109/itsc.2018.8570012
+
+TUMFTM Repositories:
+- https://github.com/TUMFTM/laptime-simulation
+- https://github.com/TUMFTM/global_racetrajectory_optimization
+- https://github.com/TUMFTM/racetrack-database
