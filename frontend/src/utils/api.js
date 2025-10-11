@@ -134,6 +134,40 @@ export const predictionsAPI = {
 
     return response.blob();
   },
+
+  // run prediction (car name + track name)
+  predict: async (carName, trackName) => {
+    return apiRequest('/api/predict', {
+      method: 'POST',
+      body: JSON.stringify({
+        car_name: carName,
+        track_name: trackName,
+      }),
+    });
+  },
+
+  // check if prediction engine is ready
+  status: async () => {
+    return apiRequest('/api/predict/status');
+  },
+
+  // download prediction CSV as text
+  download: async (filename) => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/predictions/${encodeURIComponent(filename)}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${AUTH_TOKEN}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to download prediction: ${response.status}`);
+    }
+
+    return response.text();
+  },
 };
 
 export default {

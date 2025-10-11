@@ -26,7 +26,11 @@ function App() {
   useEffect(() => {
     const checkStandalone = () => {
       const hash = window.location.hash;
-      setIsStandalone(hash === '#/live-standalone' || hash === '#/lap-replay' || hash === '#/lap-replay-viewer');
+      setIsStandalone(
+        hash === '#/live-standalone' || 
+        hash === '#/lap-replay' || 
+        hash.startsWith('#/lap-replay-viewer')
+      );
     };
     
     checkStandalone();
@@ -44,11 +48,9 @@ function App() {
       return <LapReplay />;
     }
     
-    if (hash === '#/lap-replay-viewer') {
-      // Load CSV from localStorage
-      const csvData = localStorage.getItem('lapReplayData');
-      const trackName = localStorage.getItem('lapReplayName') || 'Track';
-      return <LapReplayViewer csvData={csvData} trackName={trackName} />;
+    if (hash.startsWith('#/lap-replay-viewer')) {
+      // LapReplayViewer will load CSV from URL parameters or localStorage
+      return <LapReplayViewer />;
     }
     
     return <LiveStandalone />;

@@ -30,6 +30,13 @@ backend/data/cars/*.json
 backend/data/tracks/*.csv
 backend/data/predictions/*.csv
 
+# Prediction Engine
+backend/engine/build/
+backend/engine/outputs/
+backend/engine/temp_*.json
+backend/engine/temp_*.csv
+frontend/engine/
+
 # FastF1 Cache
 f1_cache/
 

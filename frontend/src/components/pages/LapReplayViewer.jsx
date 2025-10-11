@@ -1,20 +1,47 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { predictionsAPI } from '../../utils/api';
 
 const LapReplayViewer = ({ csvData, trackName = 'Track' }) => {
   const [telemetryData, setTelemetryData] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState(null);
   const intervalRef = useRef(null);
 
-  // Parse CSV data on mount or when csvData changes
+  // Load CSV from URL parameter or prop
   useEffect(() => {
-    if (!csvData) return;
+    const loadData = async () => {
+      // check if we have a file parameter in URL
+      const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
+      const fileParam = urlParams.get('file');
+      
+      if (fileParam) {
+        setFileName(fileParam);
+        setLoading(true);
+        try {
+          const csvText = await predictionsAPI.download(fileParam);
+          parseCsvData(csvText);
+        } catch (error) {
+          console.error('failed to load prediction file:', error);
+          alert('failed to load prediction: ' + error.message);
+        } finally {
+          setLoading(false);
+        }
+      } else if (csvData) {
+        parseCsvData(csvData);
+      }
+    };
     
+    loadData();
+  }, [csvData]);
+
+  const parseCsvData = (csvText) => {
     try {
-      const lines = csvData.split('\n').filter(line => line.trim());
+      const lines = csvText.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',').map(h => h.trim());
       
       const data = lines.slice(1).map(line => {
@@ -28,11 +55,11 @@ const LapReplayViewer = ({ csvData, trackName = 'Track' }) => {
       
       setTelemetryData(data);
       setCurrentIndex(0);
-      console.log(`Loaded ${data.length} telemetry points`);
+      console.log(`loaded ${data.length} telemetry points`);
     } catch (error) {
-      console.error('Error parsing CSV:', error);
+      console.error('error parsing CSV:', error);
     }
-  }, [csvData]);
+  };
 
   // Playback control
   useEffect(() => {
@@ -78,6 +105,23 @@ const LapReplayViewer = ({ csvData, trackName = 'Track' }) => {
           <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-xl text-gray-400">Loading telemetry data...</p>
         </div>
+      </div>
+    );
+  }
+
+  // loading or no data
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-black text-white">
+        <div className="text-xl">Loading prediction data...</div>
+      </div>
+    );
+  }
+
+  if (telemetryData.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-black text-white">
+        <div className="text-xl">No telemetry data available</div>
       </div>
     );
   }

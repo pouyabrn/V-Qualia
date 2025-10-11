@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 import uvicorn
 import os
 import json
@@ -8,6 +8,8 @@ import pandas as pd
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel
+import asyncio
+from prediction_engine import run_prediction, is_engine_built
 
 # yeah we just pretend auth exists for now lol
 PLACEHOLDER_AUTH = "ididntwriteauthsystemyetLOL"
@@ -39,38 +41,47 @@ app.add_middleware(
 )
 
 # models for request/response
-class CarConfig(BaseModel):
-    vehicle_name: str
+# nested car config models for prediction engine format
+class MassConfig(BaseModel):
     mass: float
+    cog_height: float
     wheelbase: float
-    cg_height: float
-    front_weight_dist: float
-    front_track: float
-    rear_track: float
-    tire_radius: float
-    drag_coefficient: float
-    lift_coefficient_front: float
-    lift_coefficient_rear: float
+    weight_distribution: float
+
+class AerodynamicsConfig(BaseModel):
+    Cl: float
+    Cd: float
     frontal_area: float
     air_density: float
-    tire_friction_long: float
-    tire_friction_lat: float
-    tire_load_sensitivity: float
-    max_power: float
-    max_torque: float
-    engine_inertia: float
-    drivetrain_efficiency: float
-    max_rpm: float
-    idle_rpm: float
+
+class TireConfig(BaseModel):
+    mu_x: float
+    mu_y: float
+    load_sensitivity: float
+    tire_radius: float
+
+class PowertrainConfig(BaseModel):
+    engine_torque_curve: dict
     gear_ratios: List[float]
     final_drive: float
-    shift_time: float
-    brake_bias: float
+    efficiency: float
+    max_rpm: float
+    min_rpm: float
+
+class BrakeConfig(BaseModel):
     max_brake_force: float
-    brake_efficiency: float
+    brake_bias: float
+
+class CarConfig(BaseModel):
+    name: str
+    mass: MassConfig
+    aerodynamics: AerodynamicsConfig
+    tire: TireConfig
+    powertrain: PowertrainConfig
+    brake: BrakeConfig
 
 class TrackInfo(BaseModel):
-    track_name: str
+    name: str  # unified format
     length: Optional[float] = None
     data_points: Optional[int] = None
 
@@ -133,13 +144,13 @@ async def get_car(car_name: str, auth: str = Header(None, alias="Authorization")
 async def create_car(car: CarConfig, auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    # save as json file
-    filename = f"{car.vehicle_name.replace(' ', '_')}.json"
+    # save as json file (use 'name' field now)
+    filename = f"{car.name.replace(' ', '_')}.json"
     filepath = os.path.join(CARS_DIR, filename)
     
     # check if car already exists
     if os.path.exists(filepath):
-        raise HTTPException(status_code=400, detail=f"car '{car.vehicle_name}' already exists")
+        raise HTTPException(status_code=400, detail=f"car '{car.name}' already exists")
     
     car_data = car.dict()
     car_data["created_at"] = datetime.now().isoformat()
@@ -148,7 +159,7 @@ async def create_car(car: CarConfig, auth: str = Header(None, alias="Authorizati
     with open(filepath, "w") as f:
         json.dump(car_data, f, indent=2)
     
-    return {"success": True, "message": f"car '{car.vehicle_name}' created", "car": car_data}
+    return {"success": True, "message": f"car '{car.name}' created", "car": car_data}
 
 @app.put("/api/cars/{car_name}")
 async def update_car(car_name: str, car: CarConfig, auth: str = Header(None, alias="Authorization")):
@@ -210,7 +221,7 @@ async def get_tracks(auth: str = Header(None, alias="Authorization")):
             try:
                 df = pd.read_csv(filepath)
                 track_info = {
-                    "track_name": track_name,
+                    "name": track_name,  # unified format: use 'name' not 'track_name'
                     "filename": filename,
                     "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
                     "data_points": len(df),
@@ -238,7 +249,7 @@ async def get_track(track_name: str, auth: str = Header(None, alias="Authorizati
     
     return {
         "success": True,
-        "track_name": track_name,
+        "name": track_name,  # unified format: use 'name' not 'track_name'
         "data": df.to_dict(orient='records'),
         "columns": list(df.columns),
         "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
@@ -402,6 +413,70 @@ async def cleanup_all_data(auth: str = Header(None, alias="Authorization")):
         "total_deleted": sum(deleted.values()),
         "errors": errors if errors else None
     }
+
+
+# ==========================================
+# PREDICTION ENDPOINTS
+# ==========================================
+
+class PredictionRequest(BaseModel):
+    car_name: str
+    track_name: str
+
+class PredictionResponse(BaseModel):
+    success: bool
+    lap_time: float
+    output_file: str
+    message: str
+
+@app.post("/api/predict")
+async def predict_lap(request: PredictionRequest, auth: str = Header(None, alias="Authorization")):
+    """
+    run the lap prediction engine
+    takes car and track names, runs simulation, returns lap time and telemetry file
+    """
+    verify_auth(auth)
+    
+    try:
+        # check if engine is built
+        if not is_engine_built():
+            raise HTTPException(
+                status_code=503,
+                detail="prediction engine not built. run build.bat in backend/engine/ first"
+            )
+        
+        # run prediction (this takes ~8+ seconds minimum)
+        lap_time, output_file = run_prediction(
+            car_name=request.car_name,
+            track_name=request.track_name
+        )
+        
+        return {
+            "success": True,
+            "lap_time": lap_time,
+            "output_file": output_file,
+            "message": f"prediction complete! lap time: {lap_time:.3f}s"
+        }
+        
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"prediction failed: {str(e)}")
+
+
+@app.get("/api/predict/status")
+async def prediction_status(auth: str = Header(None, alias="Authorization")):
+    """check if the prediction engine is ready"""
+    verify_auth(auth)
+    
+    engine_ready = is_engine_built()
+    
+    return {
+        "engine_built": engine_ready,
+        "ready": engine_ready,
+        "message": "engine ready" if engine_ready else "engine not built - run build.bat"
+    }
+
 
 # run the thing
 if __name__ == "__main__":

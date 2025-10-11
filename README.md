@@ -2,6 +2,19 @@
 
 > Professional telemetry analysis platform for racing data
 
+## What is this?
+
+V-Qualia is a full-stack racing telemetry analysis and lap time prediction platform. You upload racing data (CSV), get beautiful charts, compare multiple laps, and predict optimal lap times using a proper physics engine.
+
+**How it works:**
+1. **Frontend** - React/Vite web app with all the fancy charts and UI stuff
+2. **Backend** - FastAPI server handling data storage, file uploads, and API endpoints
+3. **Physics Engine** - C++ simulation engine doing the actual lap time calculations (based on TUMFTM research)
+
+The backend acts as a bridge between your browser and the physics engine. When you hit "predict", it packages your car setup and track data, fires up the C++ engine, waits for results, then sends back the optimal lap time and full telemetry.
+
+Simple as that. Upload your data, visualize it, compare it, or simulate it.
+
 ---
 
 ## Backend 
@@ -38,8 +51,60 @@ The backend API was written from scratch, focusing on performance and simplicity
 **API Endpoints:**
 - `/api/cars` - CRUD operations for vehicle configurations
 - `/api/tracks` - Track management and upload
-- `/api/predictions` - Lap simulation results
+- `/api/predict` - Run lap time prediction (integrates C++ engine)
+- `/api/predictions` - Access prediction results
 - Auto-generated docs at `/docs` (Swagger UI)
+
+### Prediction Engine
+
+The lap time prediction is powered by a **C++ physics engine** located in `backend/engine/`. This engine uses:
+- **Quasi-steady-state point mass model** with 3DOF dynamics
+- **Pacejka tire model** for realistic grip simulation
+- **Aerodynamic forces** (downforce & drag)
+- **Load transfer** calculations
+- **Powertrain model** with torque curves and gear ratios
+
+**Python Wrapper (`backend/prediction_engine.py`):**
+
+The Python wrapper handles all communication between the FastAPI backend and the C++ engine. It does the heavy lifting:
+
+- **Engine Management** - Checks if the C++ binary is built, provides build instructions if missing
+- **Data Preparation** - Converts car JSON and track CSV from the backend format to the engine's expected format
+- **Process Execution** - Spawns the C++ executable as a subprocess, captures stdout/stderr for debugging
+- **Result Parsing** - Extracts the optimal lap time from engine output (looks for "OPTIMAL LAP TIME: XX.XXX seconds")
+- **File Handling** - Finds the generated telemetry CSV in `engine/outputs/`, copies it to `backend/data/predictions/` with a timestamped filename
+- **Progress Tracking** - Enforces minimum 8-second prediction time for better UX (progress bar looks better)
+- **Error Handling** - Catches missing files, build errors, unicode issues, and provides detailed error messages
+
+The wrapper is designed to be fault-tolerant - case-insensitive file lookups, encoding error handling for Windows console output, and comprehensive logging for debugging.
+
+**Building the Engine:**
+```bash
+cd backend/engine
+# Windows:
+build.bat
+# Linux/Mac:
+./build.sh
+```
+
+**C++ Requirements:**
+- **CMake** 3.15 or higher
+- **C++17 compatible compiler:**
+  - Windows: MinGW-w64 (GCC) or MSVC
+  - Linux: GCC 7+ or Clang 5+
+  - macOS: Clang (Xcode Command Line Tools)
+- **JsonCpp** library (auto-fetched by CMake)
+
+For Windows with MSYS2:
+```bash
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake
+```
+
+The engine takes a vehicle JSON and track CSV, runs the simulation, and outputs:
+- Optimal lap time
+- Full telemetry CSV (speed, throttle, brake, gear, G-forces, etc.)
+
+Predictions take a minimum of 8 seconds to complete, with progress tracking.
 
 ### Dependencies
 
@@ -197,6 +262,31 @@ npm run build
 ```
 
 Outputs to `frontend/dist/` - ready for deployment
+
+---
+
+## Acknowledgments & References
+
+### Prediction Engine Inspiration
+
+The core lap time prediction engine was heavily inspired by the groundbreaking work from **TUM (Technical University of Munich) Motorsport** research team. Their open-source algorithms and trajectory optimization methods formed the foundation of our physics simulation:
+
+- **[TUMFTM Global Race Trajectory Optimization](https://github.com/TUMFTM/global_racetrajectory_optimization)** - Minimum curvature and time-optimal trajectory planning algorithms
+- **[TUMFTM Lap Time Simulation](https://github.com/TUMFTM/laptime-simulation)** - Quasi-steady-state point mass model with advanced vehicle dynamics
+
+Huge shoutout to the TUMFTM team for their research publications and open-source contributions to the racing simulation community!
+
+### Track Format
+
+This project uses the **TUMFTM race track format** (CSV with x, y, w_tr_right, w_tr_left columns):
+
+- **[TUMFTM Racetrack Database](https://github.com/TUMFTM/racetrack-database)** - Collection of real-world racing circuits in standardized format
+
+### Prediction Engine Repository
+
+The C++ lap time prediction engine is developed and maintained separately:
+
+- **[V-Qualia Lap Prediction Engine](https://github.com/pouyabrn/LapPredictionEngine)** - Standalone C++ physics engine with CMake build system
 
 ---
 
