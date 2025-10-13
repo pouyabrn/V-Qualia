@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <iostream>
 
 namespace LapTimeSim {
 
@@ -49,57 +50,162 @@ int PowertrainParams::getOptimalGear(double velocity, double tire_radius, double
     const double PI = 3.14159265358979323846;
     
     // Target RPM range: 70-90% of max RPM for best power/efficiency balance
-    double optimal_rpm_low = max_rpm * 0.70;   // 10,500 RPM for F1
-    double optimal_rpm_high = max_rpm * 0.90;  // 13,500 RPM for F1
+    double optimal_rpm_low = max_rpm * 0.70;
+    double optimal_rpm_high = max_rpm * 0.90;
     
-    // Find highest gear that keeps RPM above optimal_rpm_low
-    for (int i = static_cast<int>(gear_ratios.size()) - 1; i >= 0; --i) {
-        double rpm = (velocity / tire_radius) * gear_ratios[i] * final_drive_ratio * 60.0 / (2.0 * PI);
-        
-        // Use this gear if:
-        // 1. RPM is in valid operating range
-        // 2. RPM is above 70% of max (good power band)
-        if (rpm >= min_rpm && rpm <= max_rpm && rpm >= optimal_rpm_low) {
-            return i + 1;  // Gears are 1-indexed
-        }
-    }
-    
-    // Fallback: find any gear that keeps RPM in valid range
+    // Calculate RPM for all gears
+    std::vector<double> rpms(gear_ratios.size());
     for (size_t i = 0; i < gear_ratios.size(); ++i) {
-        double rpm = (velocity / tire_radius) * gear_ratios[i] * final_drive_ratio * 60.0 / (2.0 * PI);
-        if (rpm >= min_rpm && rpm <= max_rpm) {
-            return static_cast<int>(i + 1);
+        rpms[i] = (velocity / tire_radius) * gear_ratios[i] * final_drive_ratio * 60.0 / (2.0 * PI);
+    }
+    
+    // Strategy 1: Find highest gear (lowest ratio) with RPM in optimal range
+    for (int i = static_cast<int>(gear_ratios.size()) - 1; i >= 0; --i) {
+        if (rpms[i] >= optimal_rpm_low && rpms[i] <= max_rpm) {
+            return i + 1;
         }
     }
     
-    return 1;  // Default to first gear
+    // Strategy 2: Find highest gear with RPM in valid operating range (min_rpm to max_rpm)
+    for (int i = static_cast<int>(gear_ratios.size()) - 1; i >= 0; --i) {
+        if (rpms[i] >= min_rpm && rpms[i] <= max_rpm) {
+            return i + 1;
+        }
+    }
+    
+    // Strategy 3: All gears are outside range - choose gear closest to valid range
+    // If all RPMs are too high (over-revving), use highest gear to minimize RPM
+    // If all RPMs are too low (lugging), use lowest gear to maximize RPM
+    bool all_too_high = true;
+    bool all_too_low = true;
+    
+    for (double rpm : rpms) {
+        if (rpm <= max_rpm) all_too_high = false;
+        if (rpm >= min_rpm) all_too_low = false;
+    }
+    
+    if (all_too_high) {
+        // All gears over-revving: use highest gear (lowest RPM)
+        return static_cast<int>(gear_ratios.size());
+    }
+    
+    if (all_too_low) {
+        // All gears lugging: use lowest gear (highest RPM)
+        return 1;
+    }
+    
+    // Mixed case: find gear with RPM closest to optimal range
+    int best_gear = 1;
+    double best_distance = std::abs(rpms[0] - optimal_rpm_low);
+    
+    for (size_t i = 1; i < rpms.size(); ++i) {
+        double distance = std::abs(rpms[i] - optimal_rpm_low);
+        if (distance < best_distance) {
+            best_distance = distance;
+            best_gear = static_cast<int>(i + 1);
+        }
+    }
+    
+    return best_gear;
 }
 
 bool VehicleParams::validate() const {
     // Check mass parameters
-    if (mass.mass <= 0.0) return false;
-    if (mass.cog_height < 0.0) return false;
-    if (mass.wheelbase <= 0.0) return false;
-    if (mass.weight_distribution < 0.0 || mass.weight_distribution > 1.0) return false;
+    if (mass.mass <= 0.0) {
+        std::cerr << "ERROR: Vehicle mass must be positive (got " << mass.mass << " kg)" << std::endl;
+        return false;
+    }
+    if (mass.cog_height < 0.0) {
+        std::cerr << "ERROR: COG height must be non-negative (got " << mass.cog_height << " m)" << std::endl;
+        return false;
+    }
+    if (mass.wheelbase <= 0.0) {
+        std::cerr << "ERROR: Wheelbase must be positive (got " << mass.wheelbase << " m)" << std::endl;
+        return false;
+    }
+    if (mass.weight_distribution < 0.0 || mass.weight_distribution > 1.0) {
+        std::cerr << "ERROR: Weight distribution must be between 0 and 1 (got " << mass.weight_distribution << ")" << std::endl;
+        return false;
+    }
     
     // Check aero parameters
-    if (aero.frontal_area <= 0.0) return false;
-    if (aero.air_density <= 0.0) return false;
+    if (aero.frontal_area <= 0.0) {
+        std::cerr << "ERROR: Frontal area must be positive (got " << aero.frontal_area << " m²)" << std::endl;
+        return false;
+    }
+    if (aero.air_density <= 0.0) {
+        std::cerr << "ERROR: Air density must be positive (got " << aero.air_density << " kg/m³)" << std::endl;
+        return false;
+    }
     
     // Check tire parameters
-    if (tire.mu_x <= 0.0 || tire.mu_y <= 0.0) return false;
-    if (tire.tire_radius <= 0.0) return false;
-    if (tire.load_sensitivity < 0.0 || tire.load_sensitivity > 1.0) return false;
+    if (tire.mu_x <= 0.0 || tire.mu_y <= 0.0) {
+        std::cerr << "ERROR: Tire friction coefficients must be positive (mu_x=" << tire.mu_x 
+                  << ", mu_y=" << tire.mu_y << ")" << std::endl;
+        return false;
+    }
+    if (tire.tire_radius <= 0.0) {
+        std::cerr << "ERROR: Tire radius must be positive (got " << tire.tire_radius << " m)" << std::endl;
+        return false;
+    }
+    if (tire.load_sensitivity < 0.0 || tire.load_sensitivity > 1.5) {
+        std::cerr << "ERROR: Load sensitivity must be between 0.0 and 1.5 (got " << tire.load_sensitivity << ")" << std::endl;
+        std::cerr << "       Typical values: Racing slicks = 0.8-0.95, Road tires = 1.0-1.2" << std::endl;
+        return false;
+    }
     
     // Check powertrain parameters
-    if (powertrain.engine_torque_curve.empty()) return false;
-    if (powertrain.gear_ratios.empty()) return false;
-    if (powertrain.final_drive_ratio <= 0.0) return false;
-    if (powertrain.drivetrain_efficiency <= 0.0 || powertrain.drivetrain_efficiency > 1.0) return false;
+    if (powertrain.engine_torque_curve.empty()) {
+        std::cerr << "ERROR: Engine torque curve cannot be empty" << std::endl;
+        return false;
+    }
+    if (powertrain.gear_ratios.empty()) {
+        std::cerr << "ERROR: Gear ratios cannot be empty" << std::endl;
+        return false;
+    }
+    if (powertrain.final_drive_ratio <= 0.0) {
+        std::cerr << "ERROR: Final drive ratio must be positive (got " << powertrain.final_drive_ratio << ")" << std::endl;
+        return false;
+    }
+    if (powertrain.drivetrain_efficiency <= 0.0 || powertrain.drivetrain_efficiency > 1.0) {
+        std::cerr << "ERROR: Drivetrain efficiency must be between 0 and 1 (got " 
+                  << powertrain.drivetrain_efficiency << ")" << std::endl;
+        return false;
+    }
+    if (powertrain.max_rpm <= powertrain.min_rpm) {
+        std::cerr << "ERROR: max_rpm (" << powertrain.max_rpm << ") must be greater than min_rpm (" 
+                  << powertrain.min_rpm << ")" << std::endl;
+        return false;
+    }
+    
+    // Warn about potentially problematic gear ratios
+    if (!powertrain.gear_ratios.empty()) {
+        double first_gear = powertrain.gear_ratios.front();
+        double last_gear = powertrain.gear_ratios.back();
+        
+        if (first_gear <= last_gear) {
+            std::cerr << "WARNING: Gear ratios should decrease from 1st to top gear" << std::endl;
+            std::cerr << "         Got: 1st=" << first_gear << ", top=" << last_gear << std::endl;
+        }
+        
+        // Check if gears are sorted in descending order
+        for (size_t i = 1; i < powertrain.gear_ratios.size(); ++i) {
+            if (powertrain.gear_ratios[i] >= powertrain.gear_ratios[i-1]) {
+                std::cerr << "WARNING: Gear ratio " << (i+1) << " (" << powertrain.gear_ratios[i] 
+                          << ") should be less than gear " << i << " (" << powertrain.gear_ratios[i-1] << ")" << std::endl;
+            }
+        }
+    }
     
     // Check brake parameters
-    if (brake.max_brake_force <= 0.0) return false;
-    if (brake.brake_bias < 0.0 || brake.brake_bias > 1.0) return false;
+    if (brake.max_brake_force <= 0.0) {
+        std::cerr << "ERROR: Max brake force must be positive (got " << brake.max_brake_force << " N)" << std::endl;
+        return false;
+    }
+    if (brake.brake_bias < 0.0 || brake.brake_bias > 1.0) {
+        std::cerr << "ERROR: Brake bias must be between 0 and 1 (got " << brake.brake_bias << ")" << std::endl;
+        return false;
+    }
     
     return true;
 }
