@@ -1,0 +1,78 @@
+services:
+  # Frontend React Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - vqualia-network
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Backend FastAPI Application with C++ Engine
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount data directories for persistence
+      - ./backend/data/cars:/app/data/cars
+      - ./backend/data/tracks:/app/data/tracks
+      - ./backend/data/predictions:/app/data/predictions
+      # Mount f1_cache for FastF1 data persistence
+      - ./f1_cache:/app/f1_cache
+    networks:
+      - vqualia-network
+    environment:
+      - PYTHONPATH=/app
+      - ENGINE_DIR=/app/engine
+      - API_KEY=ididntwriteauthsystemyetLOL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Standalone C++ Engine (optional, for testing/debugging)
+  engine:
+    build:
+      context: ./backend/engine
+      dockerfile: Dockerfile
+    profiles:
+      - engine-only
+    volumes:
+      - ./backend/engine/examples:/app/examples
+      - ./backend/engine/outputs:/app/outputs
+    networks:
+      - vqualia-network
+    command: ["--help"]
+
+networks:
+  vqualia-network:
+    driver: bridge
+
+volumes:
+  cars-data:
+    driver: local
+  tracks-data:
+    driver: local
+  predictions-data:
+    driver: local
+  f1-cache:
+    driver: local

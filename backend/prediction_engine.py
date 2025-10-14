@@ -15,8 +15,23 @@ from typing import Tuple, Optional
 # paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENGINE_DIR = os.path.join(BASE_DIR, "engine")
-ENGINE_EXE = os.path.join(ENGINE_DIR, "build", "lap_sim.exe")
 ENGINE_OUTPUTS = os.path.join(ENGINE_DIR, "outputs")
+
+# Determine the correct executable name (lap_sim on Linux, lap_sim.exe on Windows)
+def get_engine_exe_path():
+    """Get the correct engine executable path for the current platform"""
+    lap_sim_unix = os.path.join(ENGINE_DIR, "build", "lap_sim")
+    lap_sim_windows = os.path.join(ENGINE_DIR, "build", "lap_sim.exe")
+
+    # Check for Windows executable first (more specific), then Unix
+    if os.path.exists(lap_sim_windows):
+        return lap_sim_windows
+    elif os.path.exists(lap_sim_unix):
+        return lap_sim_unix
+    else:
+        return lap_sim_windows  # Default to Windows for error messages
+
+ENGINE_EXE = get_engine_exe_path()
 
 CARS_DIR = os.path.join(BASE_DIR, "data", "cars")
 TRACKS_DIR = os.path.join(BASE_DIR, "data", "tracks")

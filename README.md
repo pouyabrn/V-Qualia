@@ -265,6 +265,271 @@ Outputs to `frontend/dist/` - ready for deployment
 
 ---
 
+## 🐳 Docker Deployment
+
+V-Qualia can be easily deployed using Docker and Docker Compose. This ensures consistent environments across different systems and simplifies the setup process.
+
+### Prerequisites
+
+- **Docker** 20.10+ installed ([Download](https://docker.com/get-started))
+- **Docker Compose** 2.0+ installed
+- At least 4GB of available RAM (recommended)
+
+### Quick Start with Docker
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/pouyabrn/V-Qualia.git
+   cd V-Qualia
+   ```
+
+2. **Start all services:**
+   ```bash
+   docker-compose up --build
+   ```
+
+3. **Access the application:**
+   - **Frontend**: [http://localhost:3000](http://localhost:3000)
+   - **Backend API**: [http://localhost:8000](http://localhost:8000)
+   - **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### Docker Services
+
+The `docker-compose.yml` includes three main services:
+
+#### Frontend Service
+- **Image**: Multi-stage Node.js build with Nginx
+- **Port**: 3000 (maps to container port 80)
+- **Features**:
+  - Production-optimized React build
+  - Nginx for static file serving
+  - Automatic API proxy to backend service
+
+#### Backend Service
+- **Image**: Python 3.11 with C++ engine
+- **Port**: 8000
+- **Features**:
+  - FastAPI server with automatic C++ engine compilation
+  - Persistent data volumes for cars, tracks, and predictions
+  - Health checks and automatic restarts
+  - FastF1 cache persistence
+
+#### Engine Service (Optional)
+- **Image**: Standalone C++ engine for testing
+- **Profile**: `engine-only` (run with `--profile engine-only`)
+- **Usage**: For development and debugging the physics engine
+
+### Data Persistence
+
+The following directories are mounted as volumes for data persistence:
+
+- `backend/data/cars/` - Vehicle configurations
+- `backend/data/tracks/` - Race track data
+- `backend/data/predictions/` - Simulation results
+- `f1_cache/` - FastF1 telemetry cache
+
+Your data will persist between container restarts.
+
+### Development with Docker
+
+#### Running in Development Mode
+
+For development with hot reload:
+
+```bash
+# Build and start services
+docker-compose up --build
+
+# Or run in background
+docker-compose up -d --build
+```
+
+#### Viewing Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f backend
+docker-compose logs -f frontend
+```
+
+#### Rebuilding After Changes
+
+```bash
+# Rebuild all services
+docker-compose up --build --force-recreate
+
+# Rebuild specific service
+docker-compose up --build --force-recreate backend
+```
+
+#### Testing the C++ Engine Separately
+
+```bash
+# Run only the engine service
+docker-compose --profile engine-only up engine
+
+# Or run a quick test
+docker-compose run --rm engine ./lap_sim --help
+```
+
+### Production Deployment
+
+For production deployment:
+
+1. **Use environment variables** for configuration
+2. **Set up proper SSL/TLS** certificates
+3. **Configure reverse proxy** (nginx/caddy/traefik)
+4. **Set resource limits** in docker-compose.yml
+5. **Use Docker secrets** for sensitive data
+
+Example production docker-compose override:
+
+```yaml
+version: '3.8'
+services:
+  frontend:
+    environment:
+      - NODE_ENV=production
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  backend:
+    environment:
+      - API_KEY=your_secure_production_key
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+```
+
+### Troubleshooting Docker Issues
+
+#### Build Failures
+
+**Problem**: C++ compilation fails
+```
+error: 'jsoncpp/json/json.h' file not found
+```
+**Solution**: Ensure the container has internet access during build for apt-get
+
+**Problem**: Python dependencies fail to install
+```
+ERROR: Could not find a version that satisfies the requirement
+```
+**Solution**: Check your internet connection and try again
+
+#### Runtime Issues
+
+**Problem**: Frontend shows "Network Error"
+**Solution**: Ensure backend service is healthy:
+```bash
+docker-compose ps
+docker-compose logs backend
+```
+
+**Problem**: Prediction endpoint returns 503 "Prediction Engine Not Built"
+**Solution**: The C++ engine wasn't detected due to platform differences (.exe vs no extension). This has been fixed in the Docker build, but if you encounter this:
+```bash
+# Check if engine exists
+docker-compose exec backend ls -la /app/engine/build/
+
+# Rebuild backend if needed
+docker-compose build --no-cache backend
+docker-compose up -d backend
+```
+
+**Problem**: Engine executable not found in Docker
+**Solution**: The code now automatically detects both `lap_sim` (Linux) and `lap_sim.exe` (Windows) executables. If issues persist, verify the build:
+```bash
+docker-compose exec backend find /app/engine -name "lap_sim*"
+```
+
+**Problem**: Out of memory during engine compilation
+**Solution**: Increase Docker memory limit to 4GB+ in Docker Desktop settings
+
+#### Data Persistence Issues
+
+**Problem**: Data not persisting between restarts
+**Solution**: Check volume mounts in docker-compose.yml and ensure directories exist on host
+
+#### Performance Issues
+
+**Problem**: Slow prediction times
+**Solution**:
+- Ensure sufficient CPU cores allocated to Docker
+- Check that the engine compiled with optimizations
+- Monitor resource usage: `docker stats`
+
+### Docker Architecture Details
+
+#### Multi-Stage Builds
+
+**Frontend**: Node.js build stage → Nginx runtime stage
+- Reduces final image size
+- No Node.js runtime in production
+
+**Backend**: Single stage with C++ compilation
+- Python environment with compiled C++ binary
+- All dependencies included for runtime
+
+#### Security Considerations
+
+- Non-root user execution where possible
+- Minimal base images (Alpine, Slim variants)
+- No sensitive data in images
+- Proper dependency management
+
+#### Networking
+
+- Internal Docker network for service communication
+- Proper CORS configuration between frontend and backend
+- Health checks ensure service dependencies
+
+### Advanced Docker Usage
+
+#### Custom Build Arguments
+
+```bash
+# Build with specific Node.js version
+docker-compose build --build-arg NODE_VERSION=18.17.0 frontend
+
+# Build with different Python version
+docker-compose build --build-arg PYTHON_VERSION=3.11 backend
+```
+
+#### Building Individual Services
+
+```bash
+# Build only frontend
+docker-compose build frontend
+
+# Build only backend
+docker-compose build backend
+
+# Build all
+docker-compose build
+```
+
+#### Docker Development Workflow
+
+1. **Make code changes**
+2. **Rebuild affected services**: `docker-compose up --build <service>`
+3. **Test changes**
+4. **Commit and push**
+
+This Docker setup provides a complete, production-ready deployment of V-Qualia with proper service orchestration, data persistence, and monitoring.
+
+---
+
 ## Acknowledgments & References
 
 ### Prediction Engine Inspiration
