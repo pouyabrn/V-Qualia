@@ -97,7 +97,7 @@ python main.py
 
 You should see:
 ```
-INFO:     Uvicorn running on http://0.0.0.0:8000
+INFO:     Uvicorn running on http://0.0.0.0:10000
 INFO:     Application startup complete.
 ```
 
@@ -106,8 +106,8 @@ INFO:     Application startup complete.
 Once both servers are running:
 
 - **Frontend**: Open your browser to [http://localhost:3000](http://localhost:3000)
-- **Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Backend API**: [http://localhost:8000](http://localhost:8000)
+- **Backend API Docs**: [http://localhost:10000/docs](http://localhost:10000/docs)
+- **Backend API**: [http://localhost:10000](http://localhost:10000)
 
 ## ✅ Verify Installation
 
@@ -119,7 +119,7 @@ Once both servers are running:
 
 ### Test the Backend
 
-1. Navigate to [http://localhost:8000/docs](http://localhost:8000/docs)
+1. Navigate to [http://localhost:10000/docs](http://localhost:10000/docs)
 2. You should see the FastAPI Swagger documentation
 3. Try the `/health` endpoint - it should return `{"status": "healthy"}`
 
@@ -195,7 +195,7 @@ Output will be in `frontend/dist/`
 The backend doesn't need a build step. For production:
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn main:app --host 0.0.0.0 --port 10000 --workers 4
 ```
 
 ## 🐛 Troubleshooting
@@ -216,7 +216,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 **Problem**: `pip install` fails
 - **Solution**: Upgrade pip: `python -m pip install --upgrade pip`
 
-**Problem**: Port 8000 already in use
+**Problem**: Port 10000 already in use
 - **Solution**: Edit `backend/main.py` and change the port
 
 **Problem**: FastF1 errors

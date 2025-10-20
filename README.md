@@ -125,11 +125,11 @@ numpy>=1.21.0
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 10000
 ```
 
-API available at `http://localhost:8000`
-Interactive docs at `http://localhost:8000/docs`
+API available at `http://localhost:10000`
+Interactive docs at `http://localhost:10000/docs`
 
 ---
 
@@ -265,6 +265,45 @@ Outputs to `frontend/dist/` - ready for deployment
 
 ---
 
+## ⚙️ Environment Variables
+
+### Frontend Environment Variables
+
+The frontend uses Vite environment variables for configuration:
+
+```bash
+# Create .env file in frontend directory
+cd frontend
+touch .env
+```
+
+**frontend/.env:**
+```env
+# Backend API URL
+# Development (default):
+VITE_API_URL=http://localhost:10000
+
+# Production:
+VITE_API_URL=https://your-production-api.com
+
+# Docker (internal networking):
+VITE_API_URL=http://backend:10000
+```
+
+### Backend Environment Variables
+
+The backend uses standard environment variables:
+
+```bash
+# Copy from template
+cp env.example .env
+
+# Edit values
+API_KEY=your-secure-api-key-here
+HOST=0.0.0.0
+PORT=10000
+```
+
 ## 🐳 Docker Deployment
 
 V-Qualia can be easily deployed using Docker and Docker Compose. This ensures consistent environments across different systems and simplifies the setup process.
@@ -290,8 +329,8 @@ V-Qualia can be easily deployed using Docker and Docker Compose. This ensures co
 
 3. **Access the application:**
    - **Frontend**: [http://localhost:3000](http://localhost:3000)
-   - **Backend API**: [http://localhost:8000](http://localhost:8000)
-   - **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Backend API**: [http://localhost:10000](http://localhost:10000)
+- **API Documentation**: [http://localhost:10000/docs](http://localhost:10000/docs)
 
 ### Docker Services
 
@@ -307,7 +346,7 @@ The `docker-compose.yml` includes three main services:
 
 #### Backend Service
 - **Image**: Python 3.11 with C++ engine
-- **Port**: 8000
+- **Port**: 10000
 - **Features**:
   - FastAPI server with automatic C++ engine compilation
   - Persistent data volumes for cars, tracks, and predictions

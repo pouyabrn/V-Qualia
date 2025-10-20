@@ -27,7 +27,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "10000:10000"
     volumes:
       # Mount data directories for persistence
       - ./backend/data/cars:/app/data/cars
@@ -43,7 +43,7 @@ services:
       - API_KEY=ididntwriteauthsystemyetLOL
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

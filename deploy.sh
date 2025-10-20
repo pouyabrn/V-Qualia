@@ -46,8 +46,8 @@ if [ "$DEPLOY_MODE" = "docker" ]; then
     echo ""
     echo "✅ Docker deployment completed!"
     echo "🌐 Frontend: http://localhost:3000"
-    echo "🔌 Backend API: http://localhost:8000"
-    echo "📚 API Docs: http://localhost:8000/docs"
+    echo "🔌 Backend API: http://localhost:10000"
+    echo "📚 API Docs: http://localhost:10000/docs"
     echo ""
     echo "To view logs: docker-compose logs -f"
     echo "To stop: docker-compose down"
@@ -112,7 +112,7 @@ Type=exec
 User=$USER
 WorkingDirectory=$(pwd)
 Environment=PATH=$(pwd)/venv/bin
-ExecStart=$(pwd)/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=$(pwd)/venv/bin/uvicorn main:app --host 0.0.0.0 --port 10000
 Restart=always
 
 [Install]
@@ -152,7 +152,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://localhost:8000/;
+        proxy_pass http://localhost:10000/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -171,8 +171,8 @@ EOF
 
     echo "✅ Traditional deployment completed!"
     echo "🌐 Frontend: http://localhost"
-    echo "🔌 Backend API: http://localhost:8000"
-    echo "📚 API Docs: http://localhost:8000/docs"
+    echo "🔌 Backend API: http://localhost:10000"
+    echo "📚 API Docs: http://localhost:10000/docs"
     echo ""
     echo "Backend service status: sudo systemctl status vqualia-backend"
     echo "Backend logs: sudo journalctl -u vqualia-backend -f"

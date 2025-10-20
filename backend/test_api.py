@@ -9,7 +9,7 @@ import json
 import time
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:10000"
 API_KEY = "your-secret-api-key-here"  # Change this to match your .env file
 
 def test_endpoint(endpoint, method="GET", data=None, headers=None):
@@ -59,7 +59,7 @@ def main():
     print("\n" + "=" * 50)
     print("Testing completed!")
     print("\nTo start the server, run: python main.py")
-    print("Then visit: http://localhost:8000/docs for interactive API documentation")
+    print("Then visit: http://localhost:10000/docs for interactive API documentation")
 
 if __name__ == "__main__":
     main()

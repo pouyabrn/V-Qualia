@@ -1,7 +1,7 @@
 // API utility for talking to backend
 // yeah we just hardcode the auth token for now lol
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';
 const AUTH_TOKEN = 'ididntwriteauthsystemyetLOL';
 
 // helper to make requests easier
@@ -14,7 +14,7 @@ const apiRequest = async (endpoint, options = {}) => {
     },
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${API_URL}${endpoint}`, {
     ...defaultOptions,
     ...options,
   });
@@ -83,7 +83,7 @@ export const tracksAPI = {
     formData.append('file', file);
 
     const response = await fetch(
-      `${API_BASE_URL}/api/tracks/upload?track_name=${encodeURIComponent(trackName)}`,
+      `${API_URL}/api/tracks/upload?track_name=${encodeURIComponent(trackName)}`,
       {
         method: 'POST',
         headers: {
@@ -120,7 +120,7 @@ export const predictionsAPI = {
   // get one prediction file
   get: async (filename) => {
     const response = await fetch(
-      `${API_BASE_URL}/api/predictions/${encodeURIComponent(filename)}`,
+      `${API_URL}/api/predictions/${encodeURIComponent(filename)}`,
       {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
@@ -154,7 +154,7 @@ export const predictionsAPI = {
   // download prediction CSV as text
   download: async (filename) => {
     const response = await fetch(
-      `${API_BASE_URL}/api/predictions/${encodeURIComponent(filename)}`,
+      `${API_URL}/api/predictions/${encodeURIComponent(filename)}`,
       {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
