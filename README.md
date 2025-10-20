@@ -600,3 +600,13 @@ The C++ lap time prediction engine is developed and maintained separately:
 
 ---
 
+
+
+<img width="1864" height="939" alt="screencapture-v-qualia-frontend-onrender-2025-10-20-16_40_89" src="https://github.com/user-attachments/assets/bd5994ed-106a-4386-bf8d-b7fa0b03e456" />
+<img width="1920" height="2805" alt="screencapture-v-qualia-frontend-onrender-2025-10-20-16_40_59" src="https://github.com/user-attachments/assets/d362077a-2b30-4ba3-bbdb-11a6531cd907" />
+<img width="1920" height="6730" alt="screencapture-v-qualia-frontend-onrender-2025-10-20-16_37_36" src="https://github.com/user-attachments/assets/85542967-3ef9-4eb3-abdd-705c3c7451c9" />
+<img width="1920" height="6468" alt="screencapture-v-qualia-frontend-onrender-2025-10-20-16_38_15" src="https://github.com/user-attachments/assets/91b400af-5e41-48cf-82bc-e0ced7fd1a42" />
+<img width="1920" height="1456" alt="screencapture-v-qualia-frontend-onrender-2025-10-20-16_39_44" src="https://github.com/user-attachments/assets/eb0bc840-3532-4f24-ba63-95eb50929a97" />
+<img width="1920" height="1536" alt="screencapture-v-qualia-frontend-onrender-2025-10-20-16_40_02" src="https://github.com/user-attachments/assets/7e9eee1c-709b-47f8-877a-e53dcef5fcb1" />
+
+
