@@ -15,6 +15,12 @@ The backend acts as a bridge between your browser and the physics engine. When y
 
 Simple as that. Upload your data, visualize it, compare it, or simulate it.
 
+## The racetrack database used in this project is sourced from the TUMFTM Racetrack Database.
+
+- Repository: https://github.com/TUMFTM/racetrack-database
+
+Special thanks to the contributors of that project for making this data available.
+
 ---
 
 ## Backend 
