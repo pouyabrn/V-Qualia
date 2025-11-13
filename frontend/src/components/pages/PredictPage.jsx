@@ -17,7 +17,6 @@ const PredictPage = () => {
   const [predictedLapTime, setPredictedLapTime] = useState(null);
   const [predictionProgress, setPredictionProgress] = useState(0);
   const [predictionOutputFile, setPredictionOutputFile] = useState(null);
-  const [predictionGGVFile, setPredictionGGVFile] = useState(null);
   const [engineStatus, setEngineStatus] = useState(null);
   
   // selected track data for visualization
@@ -148,8 +147,7 @@ const PredictPage = () => {
       // complete progress
       setPredictionProgress(100);
       setPredictedLapTime(result.lap_time);
-      setPredictionOutputFile(result.telemetry_file);
-      setPredictionGGVFile(result.ggv_file);
+      setPredictionOutputFile(result.output_file);
       
       // move to results step
       setTimeout(() => {
@@ -167,14 +165,14 @@ const PredictPage = () => {
 
   const handleDownloadCSV = async () => {
     if (!predictionOutputFile) {
-      alert('No telemetry file available');
+      alert('No prediction file available');
       return;
     }
 
     try {
       // download the CSV file
       const csvText = await predictionsAPI.download(predictionOutputFile);
-
+      
       // create download link
       const blob = new Blob([csvText], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
@@ -185,37 +183,10 @@ const PredictPage = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
+      
     } catch (error) {
       console.error('download failed:', error);
-      alert('Failed to download telemetry CSV: ' + error.message);
-    }
-  };
-
-  const handleDownloadGGV = async () => {
-    if (!predictionGGVFile) {
-      alert('No GGV file available');
-      return;
-    }
-
-    try {
-      // download the GGV CSV file
-      const csvText = await predictionsAPI.download(predictionGGVFile);
-
-      // create download link
-      const blob = new Blob([csvText], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = predictionGGVFile;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-    } catch (error) {
-      console.error('GGV download failed:', error);
-      alert('Failed to download GGV CSV: ' + error.message);
+      alert('Failed to download: ' + error.message);
     }
   };
 
@@ -224,7 +195,6 @@ const PredictPage = () => {
     setPredictionProgress(0);
     setPredictedLapTime(null);
     setPredictionOutputFile(null);
-    setPredictionGGVFile(null);
   };
 
   const handleViewLapReplay = () => {
@@ -492,24 +462,14 @@ const PredictPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <button
           onClick={handleDownloadCSV}
           className="flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-600 transition-all"
         >
           <Download size={20} />
-          Download Telemetry CSV
+          Download CSV
         </button>
-
-        {predictionGGVFile && (
-          <button
-            onClick={() => handleDownloadGGV()}
-            className="flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all"
-          >
-            <Download size={20} />
-            Download GGV CSV
-          </button>
-        )}
 
         <button
           onClick={handleViewLapReplay}

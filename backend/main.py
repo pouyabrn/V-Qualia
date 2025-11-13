@@ -426,8 +426,7 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     success: bool
     lap_time: float
-    telemetry_file: str
-    ggv_file: Optional[str] = None
+    output_file: str
     message: str
 
 @app.post("/api/predict")
@@ -447,16 +446,15 @@ async def predict_lap(request: PredictionRequest, auth: str = Header(None, alias
             )
         
         # run prediction (this takes ~8+ seconds minimum)
-        lap_time, telemetry_file, ggv_file = run_prediction(
+        lap_time, output_file = run_prediction(
             car_name=request.car_name,
             track_name=request.track_name
         )
-
+        
         return {
             "success": True,
             "lap_time": lap_time,
-            "telemetry_file": telemetry_file,
-            "ggv_file": ggv_file,
+            "output_file": output_file,
             "message": f"prediction complete! lap time: {lap_time:.3f}s"
         }
         
