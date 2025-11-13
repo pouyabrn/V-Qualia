@@ -84,10 +84,10 @@ def convert_car_to_engine_format(car_data: dict) -> dict:
     return car_data
 
 
-def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tuple[float, str]:
+def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tuple[float, str, Optional[str]]:
     """
     run the prediction engine
-    returns: (lap_time_seconds, output_csv_path)
+    returns: (lap_time_seconds, telemetry_filename, ggv_filename)
     """
     
     # check engine is built
@@ -203,31 +203,56 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
             progress_callback(0.85, "saving telemetry...")
             time.sleep(0.3)
         
-        # find the output CSV (most recent file in outputs/)
+        # find the output CSV files (telemetry and GGV)
         # engine saves to: outputs/CarName-TrackName-MM_SS-VSIM.csv
+        # and: outputs/CarName-TrackName-MM_SS-VSIM-GGV.csv
         if not os.path.exists(ENGINE_OUTPUTS):
             raise Exception(f"outputs directory not found: {ENGINE_OUTPUTS}")
-        
-        output_files = [f for f in os.listdir(ENGINE_OUTPUTS) if f.endswith('.csv') and 'VSIM' in f]
-        if not output_files:
+
+        # get all recent VSIM files
+        all_files = [f for f in os.listdir(ENGINE_OUTPUTS) if f.endswith('.csv') and 'VSIM' in f]
+        if not all_files:
             # list what's in the directory for debugging
             all_files = os.listdir(ENGINE_OUTPUTS) if os.path.exists(ENGINE_OUTPUTS) else []
             raise Exception(f"no output CSV generated. Files in outputs/: {all_files}")
-        
-        # get most recent file (in case there are multiple)
-        output_files.sort(key=lambda x: os.path.getmtime(os.path.join(ENGINE_OUTPUTS, x)), reverse=True)
-        latest_output = output_files[0]
-        
+
+        # sort by modification time (most recent first)
+        all_files.sort(key=lambda x: os.path.getmtime(os.path.join(ENGINE_OUTPUTS, x)), reverse=True)
+
+        # find telemetry and GGV files (should be the two most recent)
+        telemetry_file = None
+        ggv_file = None
+
+        for filename in all_files:
+            if 'GGV' in filename and ggv_file is None:
+                ggv_file = filename
+            elif 'GGV' not in filename and telemetry_file is None:
+                telemetry_file = filename
+
+        if not telemetry_file:
+            raise Exception(f"telemetry CSV not found. Available files: {all_files}")
+
         # copy to predictions directory (keep original for debugging)
         # use timestamp to make filenames unique
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"{car_name}_{track_name}_{timestamp}.csv"
-        final_output_path = os.path.join(PREDICTIONS_DIR, output_filename)
-        
+
+        # copy telemetry file
+        telemetry_filename = f"{car_name}_{track_name}_{timestamp}.csv"
+        telemetry_path = os.path.join(PREDICTIONS_DIR, telemetry_filename)
         shutil.copy(
-            os.path.join(ENGINE_OUTPUTS, latest_output),
-            final_output_path
+            os.path.join(ENGINE_OUTPUTS, telemetry_file),
+            telemetry_path
         )
+
+        # copy GGV file if it exists
+        ggv_filename = None
+        if ggv_file:
+            ggv_filename = f"{car_name}_{track_name}_{timestamp}_GGV.csv"
+            ggv_path = os.path.join(PREDICTIONS_DIR, ggv_filename)
+            shutil.copy(
+                os.path.join(ENGINE_OUTPUTS, ggv_file),
+                ggv_path
+            )
         
         # ensure minimum duration
         elapsed = time.time() - start_time
@@ -247,7 +272,7 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
         except:
             pass
         
-        return lap_time, output_filename
+        return lap_time, telemetry_filename, ggv_filename
         
     except subprocess.TimeoutExpired:
         raise Exception("prediction timed out (>60s)")
