@@ -23,7 +23,7 @@
 using namespace LapTimeSim;
 
 void printUsage(const char* program_name) {
-    std::cout << "Usage: " << program_name << " <track_json> <vehicle_json> [options]\n";
+    std::cout << "Usage: " << program_name << " <track_csv> <vehicle_json> [options]\n";
     std::cout << "\nOptions:\n";
     std::cout << "  --csv <file>        Export telemetry to CSV file\n";
     std::cout << "  --json <file>       Export telemetry to JSON file\n";
@@ -31,8 +31,11 @@ void printUsage(const char* program_name) {
     std::cout << "  --iterations <N>    Maximum solver iterations (default: 10)\n";
     std::cout << "  --tolerance <T>     Convergence tolerance (default: 0.001)\n";
     std::cout << "  --help              Show this help message\n";
+    std::cout << "\nOutput:\n";
+    std::cout << "  - Telemetry CSV: outputs/CarName-TrackName-LapTime-VSIM.csv\n";
+    std::cout << "  - GGV diagram:  outputs/CarName-TrackName-LapTime-VSIM-GGV.csv\n";
     std::cout << "\nExample:\n";
-    std::cout << "  " << program_name << " track.json vehicle.json --csv telemetry.csv\n";
+    std::cout << "  " << program_name << " examples/montreal.csv examples/f1_2025.json\n";
 }
 
 struct CommandLineArgs {
@@ -174,11 +177,49 @@ int main(int argc, char* argv[]) {
         
         // Always export CSV
         logger.exportToCSV(result, csv_filename);
-        
+
         // Export JSON if requested
         if (!args.json_output.empty()) {
             logger.exportToJSON(result, args.json_output);
         }
+
+        // Auto-export GGV diagram to outputs directory
+        std::string ggv_filename;
+        if (!args.ggv_output.empty()) {
+            // Use user-specified filename
+            ggv_filename = args.ggv_output;
+        } else {
+            // Generate automatic filename: carname-track-laptime-VSIM-GGV.json
+            std::string vehicle_name = vehicle.getName();
+            std::string track_name = track.getName();
+
+            // Clean up names (same as CSV)
+            auto clean_name = [](std::string str) {
+                for (auto& c : str) {
+                    if (c == ' ' || c == '-' || c == '(' || c == ')') c = '_';
+                }
+                // Remove consecutive underscores
+                size_t pos;
+                while ((pos = str.find("__")) != std::string::npos) {
+                    str.replace(pos, 2, "_");
+                }
+                return str;
+            };
+
+            vehicle_name = clean_name(vehicle_name);
+            track_name = clean_name(track_name);
+
+            // Format lap time as MM_SS (same as CSV)
+            int minutes = static_cast<int>(lap_time) / 60;
+            int seconds = static_cast<int>(lap_time) % 60;
+            char lap_str[16];
+            snprintf(lap_str, sizeof(lap_str), "%d_%02d", minutes, seconds);
+
+            // Generate filename: outputs/carname-track-laptime-VSIM-GGV.csv
+            ggv_filename = "outputs/" + vehicle_name + "-" + track_name + "-" + lap_str + "-VSIM-GGV.csv";
+        }
+
+        solver.exportGGVToFile(ggv_filename);
         
         // Print final result prominently
         std::cout << "\n";

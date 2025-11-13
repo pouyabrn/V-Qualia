@@ -61,11 +61,17 @@ public:
      * @brief Check if solver has converged
      */
     bool hasConverged() const { return converged_; }
-    
+
     /**
      * @brief Get number of iterations used
      */
     int getIterationsUsed() const { return iterations_used_; }
+
+    /**
+     * @brief Export GGV diagram to CSV file
+     * @param filename Output CSV file path
+     */
+    void exportGGVToFile(const std::string& filename) const;
 
 private:
     const TrackData& track_;

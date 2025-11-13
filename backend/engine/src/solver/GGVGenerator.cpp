@@ -206,16 +206,16 @@ void GGVGenerator::exportToCSV(const std::string& filename) const {
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file for writing: " + filename);
     }
-    
+
     file << "velocity_ms,lateral_accel_ms2,max_accel_ms2,max_brake_ms2\n";
-    
+
     for (const auto& point : ggv_points_) {
         file << point.velocity << ","
              << point.ay_lateral << ","
              << point.ax_max_accel << ","
              << point.ax_max_brake << "\n";
     }
-    
+
     file.close();
 }
 

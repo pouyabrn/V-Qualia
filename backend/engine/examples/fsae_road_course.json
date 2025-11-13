@@ -1,0 +1,42 @@
+{
+  "name": "FSAE_RoadCourse",
+  "mass": {
+    "mass": 220.0,
+    "cog_height": 0.28,
+    "wheelbase": 1.59,
+    "weight_distribution": 0.48
+  },
+  "aerodynamics": {
+    "Cl": -2.8,
+    "Cd": 1.3,
+    "frontal_area": 1.1,
+    "air_density": 1.225
+  },
+  "tire": {
+    "mu_x": 1.5,
+    "mu_y": 1.6,
+    "load_sensitivity": 0.85,
+    "tire_radius": 0.22
+  },
+  "powertrain": {
+    "engine_torque_curve": {
+      "6000": 62,
+      "7000": 68,
+      "8000": 72,
+      "9000": 74,
+      "10000": 75,
+      "11000": 73,
+      "12000": 68
+    },
+    "gear_ratios": [2.8, 2.2, 1.8, 1.5, 1.3],
+    "final_drive": 3.2,
+    "efficiency": 0.92,
+    "max_rpm": 12000,
+    "min_rpm": 6000
+  },
+  "brake": {
+    "max_brake_force": 6000.0,
+    "brake_bias": 0.48
+  }
+}
+

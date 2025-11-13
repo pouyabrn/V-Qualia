@@ -376,5 +376,15 @@ SimulationState QuasiSteadyStateSolver::createState(size_t index, double time) c
     return state;
 }
 
+void QuasiSteadyStateSolver::exportGGVToFile(const std::string& filename) const {
+    if (!ggv_->isGenerated()) {
+        throw std::runtime_error("GGV diagram has not been generated - run solve() first");
+    }
+
+    // Export to CSV
+    ggv_->exportToCSV(filename);
+    std::cout << "GGV diagram exported to CSV: " << filename << std::endl;
+}
+
 } // namespace LapTimeSim
 
