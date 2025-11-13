@@ -7,6 +7,7 @@ import PredictPage from './components/pages/PredictPage';
 import CarsPage from './components/pages/CarsPage';
 import TracksPage from './components/pages/TracksPage';
 import ComparePage from './components/pages/ComparePage';
+import GGVPage from './components/pages/GGVPage';
 import LivePage from './components/pages/LivePage';
 import LiveStandalone from './components/pages/LiveStandalone';
 import LapReplay from './components/pages/LapReplay';
@@ -91,6 +92,8 @@ function App() {
           )}
 
           {activeTab === 'compare' && <ComparePage />}
+
+          {activeTab === 'ggv' && <GGVPage />}
 
           {activeTab === 'predict' && <PredictPage />}
 

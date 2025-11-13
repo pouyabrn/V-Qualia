@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 const Header = ({ activeTab, setActiveTab }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const navTabs = ['home', 'analyze', 'compare', 'predict', 'live'];
+  const navTabs = ['home', 'analyze', 'compare', 'ggv', 'predict', 'live'];
 
   // Prevent body scroll when mobile menu is open
   useEffect(() => {
