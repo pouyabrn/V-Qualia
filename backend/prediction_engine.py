@@ -8,17 +8,18 @@ import os
 import json
 import time
 import shutil
+import re
 import pandas as pd
 from datetime import datetime
 from typing import Tuple, Optional
 
 # paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENGINE_DIR = os.path.join(BASE_DIR, "engine")
+ENGINE_DIR = os.getenv("ENGINE_DIR", os.path.join(BASE_DIR, "engine"))
 ENGINE_OUTPUTS = os.path.join(ENGINE_DIR, "outputs")
 
 # Determine the correct executable name (lap_sim on Linux, lap_sim.exe on Windows)
-def get_engine_exe_path():
+def get_engine_exe_path() -> str:
     """Get the correct engine executable path for the current platform"""
     lap_sim_unix = os.path.join(ENGINE_DIR, "build", "lap_sim")
     lap_sim_windows = os.path.join(ENGINE_DIR, "build", "lap_sim.exe")
@@ -29,9 +30,8 @@ def get_engine_exe_path():
     elif os.path.exists(lap_sim_unix):
         return lap_sim_unix
     else:
-        return lap_sim_windows  # Default to Windows for error messages
-
-ENGINE_EXE = get_engine_exe_path()
+        # Default to platform-appropriate path for clearer error messages
+        return lap_sim_windows if os.name == "nt" else lap_sim_unix
 
 CARS_DIR = os.path.join(BASE_DIR, "data", "cars")
 TRACKS_DIR = os.path.join(BASE_DIR, "data", "tracks")
@@ -44,30 +44,59 @@ os.makedirs(PREDICTIONS_DIR, exist_ok=True)
 
 def is_engine_built() -> bool:
     """check if the C++ engine is built"""
-    return os.path.exists(ENGINE_EXE)
+    return os.path.exists(get_engine_exe_path())
+
+
+def _run_command(cmd: list, cwd: str, timeout: int) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        cmd,
+        cwd=cwd,
+        capture_output=True,
+        encoding='utf-8',
+        errors='ignore',
+        timeout=timeout
+    )
 
 
 def build_engine() -> bool:
-    """try to build the engine (Windows only for now)"""
+    """try to build the engine using cmake with platform script fallback"""
+    if is_engine_built():
+        return True
+
     try:
-        build_script = os.path.join(ENGINE_DIR, "build.bat")
-        if not os.path.exists(build_script):
-            return False
-        
-        # run build script
-        result = subprocess.run(
-            [build_script],
-            cwd=ENGINE_DIR,
-            capture_output=True,
-            encoding='utf-8',
-            errors='ignore',
-            timeout=180  # 3 minutes max
-        )
-        
-        return result.returncode == 0 and is_engine_built()
+        build_dir = os.path.join(ENGINE_DIR, "build")
+        os.makedirs(build_dir, exist_ok=True)
+
+        configure = _run_command(["cmake", ".."], cwd=build_dir, timeout=180)
+        if configure.returncode == 0:
+            build = _run_command(["cmake", "--build", ".", "--config", "Release", "-j"], cwd=build_dir, timeout=300)
+            if build.returncode == 0 and is_engine_built():
+                return True
+            print(f"cmake build failed: {build.stderr or build.stdout}")
+        else:
+            print(f"cmake configure failed: {configure.stderr or configure.stdout}")
     except Exception as e:
-        print(f"build failed: {e}")
-        return False
+        print(f"cmake build failed: {e}")
+
+    try:
+        if os.name == "nt":
+            build_script = os.path.join(ENGINE_DIR, "build.bat")
+            if os.path.exists(build_script):
+                result = _run_command(["cmd", "/c", build_script], cwd=ENGINE_DIR, timeout=300)
+                if result.returncode == 0 and is_engine_built():
+                    return True
+                print(f"build.bat failed: {result.stderr or result.stdout}")
+        else:
+            build_script = os.path.join(ENGINE_DIR, "build.sh")
+            if os.path.exists(build_script):
+                result = _run_command(["bash", build_script], cwd=ENGINE_DIR, timeout=300)
+                if result.returncode == 0 and is_engine_built():
+                    return True
+                print(f"build.sh failed: {result.stderr or result.stdout}")
+    except Exception as e:
+        print(f"script build failed: {e}")
+
+    return False
 
 
 def convert_car_to_engine_format(car_data: dict) -> dict:
@@ -84,6 +113,30 @@ def convert_car_to_engine_format(car_data: dict) -> dict:
     return car_data
 
 
+def _find_car_file(car_name: str) -> Optional[str]:
+    """Find car JSON by filename first, then by internal JSON 'name' field."""
+    desired_filename = f"{car_name.replace(' ', '_')}.json".lower()
+    for filename in os.listdir(CARS_DIR):
+        if filename.lower() == desired_filename:
+            return os.path.join(CARS_DIR, filename)
+
+    target_name = car_name.strip().lower()
+    for filename in os.listdir(CARS_DIR):
+        if not filename.endswith(".json"):
+            continue
+        filepath = os.path.join(CARS_DIR, filename)
+        try:
+            with open(filepath, "r") as f:
+                data = json.load(f)
+            file_car_name = str(data.get("name", "")).strip().lower()
+            if file_car_name == target_name:
+                return filepath
+        except Exception:
+            continue
+
+    return None
+
+
 def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tuple[float, str, Optional[str]]:
     """
     run the prediction engine
@@ -94,18 +147,16 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
     if not is_engine_built():
         # try to build it
         if not build_engine():
-            raise Exception("engine not built. please run build.bat in backend/engine/")
+            raise Exception("engine not built. run ./build.sh (Linux/macOS) or build.bat (Windows) in backend/engine/")
+
+    engine_exe = get_engine_exe_path()
     
     # load car and track (case-insensitive)
     car_filename = f"{car_name.replace(' ', '_')}.json"
     track_filename = f"{track_name.replace(' ', '_')}.csv"
     
     # find files case-insensitively
-    car_file = None
-    for f in os.listdir(CARS_DIR):
-        if f.lower() == car_filename.lower():
-            car_file = os.path.join(CARS_DIR, f)
-            break
+    car_file = _find_car_file(car_name)
     
     track_file = None
     for f in os.listdir(TRACKS_DIR):
@@ -137,6 +188,10 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
     # simulate progress: minimum 8 seconds
     start_time = time.time()
     min_duration = 8.0
+    existing_output_files = set(
+        f for f in os.listdir(ENGINE_OUTPUTS)
+        if f.endswith('.csv') and 'VSIM' in f
+    ) if os.path.exists(ENGINE_OUTPUTS) else set()
     
     # update progress: 0-20% (preparing)
     if progress_callback:
@@ -148,7 +203,7 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
     # run the engine
     try:
         # the engine expects: lap_sim.exe <track_csv> <vehicle_json>
-        cmd = [ENGINE_EXE, temp_track_file, temp_car_file]
+        cmd = [engine_exe, temp_track_file, temp_car_file]
         
         if progress_callback:
             progress_callback(0.30, "running physics engine...")
@@ -180,19 +235,13 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
         # the engine prints "OPTIMAL LAP TIME: XX.XXX seconds" in a box
         lap_time = None
         stdout_text = result.stdout if result.stdout else ""
-        for line in stdout_text.split('\n'):
-            # look for the line with "OPTIMAL LAP TIME:"
-            if "OPTIMAL LAP TIME:" in line or "Optimal Lap Time:" in line:
-                try:
-                    # extract the number - format is "OPTIMAL LAP TIME: XX.XXX seconds"
-                    # split by colon, take the part after, split by "seconds", take first part
-                    after_colon = line.split(':')[-1]
-                    time_str = after_colon.split('seconds')[0].strip()
-                    lap_time = float(time_str)
-                    break
-                except Exception as e:
-                    print(f"failed to parse lap time from line: {line}, error: {e}")
-                    pass
+        lap_time_match = re.search(
+            r"OPTIMAL\s+LAP\s+TIME:\s*([0-9]+(?:\.[0-9]+)?)\s*seconds",
+            stdout_text,
+            flags=re.IGNORECASE
+        )
+        if lap_time_match:
+            lap_time = float(lap_time_match.group(1))
         
         if lap_time is None:
             # show stdout for debugging
@@ -216,21 +265,23 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
             all_files = os.listdir(ENGINE_OUTPUTS) if os.path.exists(ENGINE_OUTPUTS) else []
             raise Exception(f"no output CSV generated. Files in outputs/: {all_files}")
 
-        # sort by modification time (most recent first)
-        all_files.sort(key=lambda x: os.path.getmtime(os.path.join(ENGINE_OUTPUTS, x)), reverse=True)
+        # Prefer files generated by this run to avoid stale-output mismatches.
+        new_files = [f for f in all_files if f not in existing_output_files]
+        candidate_files = new_files if new_files else all_files
+        candidate_files.sort(key=lambda x: os.path.getmtime(os.path.join(ENGINE_OUTPUTS, x)), reverse=True)
 
-        # find telemetry and GGV files (should be the two most recent)
+        # find telemetry and GGV files
         telemetry_file = None
         ggv_file = None
 
-        for filename in all_files:
+        for filename in candidate_files:
             if 'GGV' in filename and ggv_file is None:
                 ggv_file = filename
             elif 'GGV' not in filename and telemetry_file is None:
                 telemetry_file = filename
 
         if not telemetry_file:
-            raise Exception(f"telemetry CSV not found. Available files: {all_files}")
+            raise Exception(f"telemetry CSV not found. Available files: {candidate_files}")
 
         # copy to predictions directory (keep original for debugging)
         # use timestamp to make filenames unique
@@ -275,7 +326,7 @@ def run_prediction(car_name: str, track_name: str, progress_callback=None) -> Tu
         return lap_time, telemetry_filename, ggv_filename
         
     except subprocess.TimeoutExpired:
-        raise Exception("prediction timed out (>60s)")
+        raise Exception("prediction timed out (>120s)")
     except Exception as e:
         # cleanup temp files
         try:
@@ -292,4 +343,3 @@ def get_prediction_csv(filename: str) -> pd.DataFrame:
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"prediction file not found: {filename}")
     return pd.read_csv(filepath)
-

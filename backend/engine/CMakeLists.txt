@@ -13,17 +13,9 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Find required packages
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-
-# Optional: Find Eigen3 (for future advanced features)
-# find_package(Eigen3 QUIET)
-
 # Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
-    ${JSONCPP_INCLUDE_DIRS}
 )
 
 # Source files
@@ -44,17 +36,6 @@ set(SOURCES
 # Create executable
 add_executable(lap_sim ${SOURCES})
 
-# Link libraries
-target_link_libraries(lap_sim
-    ${JSONCPP_LIBRARIES}
-)
-
-# If Eigen3 is found, enable it
-# if(Eigen3_FOUND)
-#     target_link_libraries(lap_sim Eigen3::Eigen)
-#     target_compile_definitions(lap_sim PRIVATE HAVE_EIGEN3)
-# endif()
-
 # Installation
 install(TARGETS lap_sim DESTINATION bin)
 
@@ -66,8 +47,4 @@ message(STATUS "  CMake Version: ${CMAKE_VERSION}")
 message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Install Prefix: ${CMAKE_INSTALL_PREFIX}")
-message(STATUS "  JsonCpp Include: ${JSONCPP_INCLUDE_DIRS}")
-message(STATUS "  JsonCpp Libraries: ${JSONCPP_LIBRARIES}")
 message(STATUS "==============================================")
-
-

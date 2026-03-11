@@ -1,6 +1,7 @@
 #include "solver/GGVGenerator.h"
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -10,7 +11,7 @@ namespace LapTimeSim {
 GGVGenerator::GGVGenerator(const VehicleParams& vehicle)
     : vehicle_(vehicle),
       aero_model_(vehicle.aero),
-      tire_model_(vehicle.tire),
+      tire_model_(vehicle.tire, vehicle.mass.mass * VehicleParams::GRAVITY / 4.0),
       powertrain_model_(vehicle.powertrain, vehicle.tire.tire_radius),
       generated_(false),
       v_min_(0), v_max_(0), v_step_(1),
@@ -47,69 +48,29 @@ void GGVGenerator::generate(double v_min, double v_max, double v_step,
 double GGVGenerator::calculateMaxAcceleration(double v, double ay) const {
     const double g = VehicleParams::GRAVITY;
     const double m = vehicle_.mass.mass;
-    
-    // Minimum velocity for calculations
-    if (v < 0.1) v = 0.1;
-    
-    // Calculate vertical load including downforce
-    double Fz_total = aero_model_.getTotalVerticalLoad(v, m, g);
-    
-    // Calculate lateral force required for current lateral acceleration
-    double Fy_required = m * ay;
-    
-    // Get available longitudinal force from tire model (friction circle)
-    double Fx_tire_max = tire_model_.getAvailableLongitudinalForce(Fz_total, Fy_required);
-    
-    // Get engine force
-    double Fx_engine = powertrain_model_.getMaxWheelForce(v);
-    
-    // Get drag force (negative acceleration)
-    double F_drag = aero_model_.getDragForce(v);
-    
-    // Net force is limited by minimum of engine and tire grip
-    double Fx_available = std::min(Fx_engine, Fx_tire_max);
-    
-    // Net longitudinal force (subtract drag)
-    double Fx_net = Fx_available - F_drag;
-    
-    // Acceleration = F / m
-    double ax = Fx_net / m;
-    
-    // Cannot accelerate backwards, and cap at reasonable F1 values
-    return std::max(0.0, std::min(ax, 50.0));  // Cap at ~5g acceleration
+
+    const double velocity = std::max(0.0, v);
+    const double Fz_total = aero_model_.getTotalVerticalLoad(velocity, m, g);
+    const double Fy_required = m * std::abs(ay);
+    const double Fx_tire_max = tire_model_.getAvailableLongitudinalForce(Fz_total, Fy_required);
+    const double Fx_engine = powertrain_model_.getBestAccelerationPoint(velocity).wheel_force;
+    const double Fx_net = std::min(Fx_engine, Fx_tire_max) - aero_model_.getDragForce(velocity);
+
+    return std::max(0.0, Fx_net / m);
 }
 
 double GGVGenerator::calculateMaxBraking(double v, double ay) const {
     const double g = VehicleParams::GRAVITY;
     const double m = vehicle_.mass.mass;
-    
-    // Minimum velocity for calculations
-    if (v < 0.1) v = 0.1;
-    
-    // Calculate vertical load including downforce
-    double Fz_total = aero_model_.getTotalVerticalLoad(v, m, g);
-    
-    // Calculate lateral force required
-    double Fy_required = m * ay;
-    
-    // Get available longitudinal force from tire model
-    double Fx_tire_max = tire_model_.getAvailableLongitudinalForce(Fz_total, Fy_required);
-    
-    // Braking force is limited by tire grip and brake system
-    double Fx_brake_system = vehicle_.brake.max_brake_force;
-    double Fx_brake = std::min(Fx_tire_max, Fx_brake_system);
-    
-    // Drag helps with braking
-    double F_drag = aero_model_.getDragForce(v);
-    
-    // Net braking force (both negative)
-    double Fx_net = -(Fx_brake + F_drag);
-    
-    // Deceleration = F / m (negative value)
-    double ax = Fx_net / m;
-    
-    // Cap at reasonable F1 braking values
-    return std::max(ax, -60.0);  // Cap at ~6g braking
+
+    const double velocity = std::max(0.0, v);
+    const double Fz_total = aero_model_.getTotalVerticalLoad(velocity, m, g);
+    const double Fy_required = m * std::abs(ay);
+    const double Fx_tire_max = tire_model_.getAvailableLongitudinalForce(Fz_total, Fy_required);
+    const double Fx_brake = std::min(Fx_tire_max, vehicle_.brake.max_brake_force);
+    const double Fx_net = -(Fx_brake + aero_model_.getDragForce(velocity));
+
+    return Fx_net / m;
 }
 
 double GGVGenerator::getMaxAcceleration(double v, double ay) const {
@@ -129,79 +90,73 @@ double GGVGenerator::getMaxBraking(double v, double ay) const {
 }
 
 double GGVGenerator::interpolateAcceleration(double v, double ay) const {
-    // Clamp to valid range
     v = std::max(v_min_, std::min(v_max_, v));
     ay = std::max(0.0, std::min(ay_max_, ay));
-    
-    // Find surrounding grid points
-    double v_idx_f = (v - v_min_) / v_step_;
-    double ay_idx_f = ay / ay_step_;
-    
-    int v_idx = static_cast<int>(v_idx_f);
-    int ay_idx = static_cast<int>(ay_idx_f);
-    
-    double v_t = v_idx_f - v_idx;
-    double ay_t = ay_idx_f - ay_idx;
-    
-    // Get values at four corners
-    int num_ay_points = static_cast<int>((ay_max_ - ay_min_) / ay_step_) + 1;
-    
+
+    const double v_idx_f = (v - v_min_) / v_step_;
+    const double ay_idx_f = ay / ay_step_;
+    const int v_points = static_cast<int>((v_max_ - v_min_) / v_step_) + 1;
+    const int ay_points = static_cast<int>((ay_max_ - ay_min_) / ay_step_) + 1;
+
+    const int v_idx = std::min(v_points - 2, std::max(0, static_cast<int>(std::floor(v_idx_f))));
+    const int ay_idx = std::min(ay_points - 2, std::max(0, static_cast<int>(std::floor(ay_idx_f))));
+    const double v_t = std::clamp(v_idx_f - v_idx, 0.0, 1.0);
+    const double ay_t = std::clamp(ay_idx_f - ay_idx, 0.0, 1.0);
+
     auto getValue = [&](int vi, int ayi) -> double {
-        int index = vi * num_ay_points + ayi;
-        if (index >= 0 && index < static_cast<int>(ggv_points_.size())) {
-            return ggv_points_[index].ax_max_accel;
-        }
-        return 0.0;
+        const int index = vi * ay_points + ayi;
+        return (index >= 0 && index < static_cast<int>(ggv_points_.size()))
+            ? ggv_points_[static_cast<size_t>(index)].ax_max_accel
+            : 0.0;
     };
-    
-    // Bilinear interpolation
-    double v00 = getValue(v_idx, ay_idx);
-    double v10 = getValue(v_idx + 1, ay_idx);
-    double v01 = getValue(v_idx, ay_idx + 1);
-    double v11 = getValue(v_idx + 1, ay_idx + 1);
-    
-    double v0 = v00 * (1 - v_t) + v10 * v_t;
-    double v1 = v01 * (1 - v_t) + v11 * v_t;
-    
+
+    const double v00 = getValue(v_idx, ay_idx);
+    const double v10 = getValue(v_idx + 1, ay_idx);
+    const double v01 = getValue(v_idx, ay_idx + 1);
+    const double v11 = getValue(v_idx + 1, ay_idx + 1);
+    const double v0 = v00 * (1.0 - v_t) + v10 * v_t;
+    const double v1 = v01 * (1.0 - v_t) + v11 * v_t;
+
     return v0 * (1 - ay_t) + v1 * ay_t;
 }
 
 double GGVGenerator::interpolateBraking(double v, double ay) const {
-    // Similar to interpolateAcceleration but for braking
     v = std::max(v_min_, std::min(v_max_, v));
     ay = std::max(0.0, std::min(ay_max_, ay));
-    
-    double v_idx_f = (v - v_min_) / v_step_;
-    double ay_idx_f = ay / ay_step_;
-    
-    int v_idx = static_cast<int>(v_idx_f);
-    int ay_idx = static_cast<int>(ay_idx_f);
-    
-    double v_t = v_idx_f - v_idx;
-    double ay_t = ay_idx_f - ay_idx;
-    
-    int num_ay_points = static_cast<int>((ay_max_ - ay_min_) / ay_step_) + 1;
-    
+
+    const double v_idx_f = (v - v_min_) / v_step_;
+    const double ay_idx_f = ay / ay_step_;
+    const int v_points = static_cast<int>((v_max_ - v_min_) / v_step_) + 1;
+    const int ay_points = static_cast<int>((ay_max_ - ay_min_) / ay_step_) + 1;
+
+    const int v_idx = std::min(v_points - 2, std::max(0, static_cast<int>(std::floor(v_idx_f))));
+    const int ay_idx = std::min(ay_points - 2, std::max(0, static_cast<int>(std::floor(ay_idx_f))));
+    const double v_t = std::clamp(v_idx_f - v_idx, 0.0, 1.0);
+    const double ay_t = std::clamp(ay_idx_f - ay_idx, 0.0, 1.0);
+
     auto getValue = [&](int vi, int ayi) -> double {
-        int index = vi * num_ay_points + ayi;
-        if (index >= 0 && index < static_cast<int>(ggv_points_.size())) {
-            return ggv_points_[index].ax_max_brake;
-        }
-        return 0.0;
+        const int index = vi * ay_points + ayi;
+        return (index >= 0 && index < static_cast<int>(ggv_points_.size()))
+            ? ggv_points_[static_cast<size_t>(index)].ax_max_brake
+            : 0.0;
     };
-    
-    double v00 = getValue(v_idx, ay_idx);
-    double v10 = getValue(v_idx + 1, ay_idx);
-    double v01 = getValue(v_idx, ay_idx + 1);
-    double v11 = getValue(v_idx + 1, ay_idx + 1);
-    
-    double v0 = v00 * (1 - v_t) + v10 * v_t;
-    double v1 = v01 * (1 - v_t) + v11 * v_t;
-    
+
+    const double v00 = getValue(v_idx, ay_idx);
+    const double v10 = getValue(v_idx + 1, ay_idx);
+    const double v01 = getValue(v_idx, ay_idx + 1);
+    const double v11 = getValue(v_idx + 1, ay_idx + 1);
+    const double v0 = v00 * (1.0 - v_t) + v10 * v_t;
+    const double v1 = v01 * (1.0 - v_t) + v11 * v_t;
+
     return v0 * (1 - ay_t) + v1 * ay_t;
 }
 
 void GGVGenerator::exportToCSV(const std::string& filename) const {
+    const std::filesystem::path output_path(filename);
+    if (output_path.has_parent_path()) {
+        std::filesystem::create_directories(output_path.parent_path());
+    }
+
     std::ofstream file(filename);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file for writing: " + filename);
@@ -220,4 +175,3 @@ void GGVGenerator::exportToCSV(const std::string& filename) const {
 }
 
 } // namespace LapTimeSim
-

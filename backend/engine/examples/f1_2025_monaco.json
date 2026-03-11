@@ -1,5 +1,5 @@
 {
-  "name": "F1_2025_Normal",
+  "name": "F1_2025_Monaco",
   "mass": {
     "mass": 800.0,
     "cog_height": 0.25,
@@ -7,8 +7,8 @@
     "weight_distribution": 0.46
   },
   "aerodynamics": {
-    "Cl": -4.2,
-    "Cd": 0.95,
+    "Cl": -5.0,
+    "Cd": 1.12,
     "frontal_area": 1.42,
     "air_density": 1.225
   },
@@ -32,15 +32,15 @@
       "14000": 505,
       "15000": 482
     },
-    "gear_ratios": [10.8, 8.9, 7.4, 6.4, 5.7, 5.1, 4.5, 3.9],
-    "final_drive": 1.38,
+    "gear_ratios": [12.0, 9.9, 8.2, 7.0, 6.1, 5.4, 4.8, 4.3],
+    "final_drive": 1.45,
     "efficiency": 0.98,
     "max_rpm": 15000,
     "min_rpm": 5000,
     "shift_time": 0.035
   },
   "brake": {
-    "max_brake_force": 32000,
-    "brake_bias": 0.62
+    "max_brake_force": 31000,
+    "brake_bias": 0.60
   }
 }

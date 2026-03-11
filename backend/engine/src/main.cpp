@@ -16,9 +16,11 @@
 #include "solver/QuasiSteadyStateSolver.h"
 #include "telemetry/TelemetryLogger.h"
 #include <iostream>
-#include <string>
+#include <iomanip>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <cstdio>
 
 using namespace LapTimeSim;
 
@@ -244,4 +246,3 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 }
-

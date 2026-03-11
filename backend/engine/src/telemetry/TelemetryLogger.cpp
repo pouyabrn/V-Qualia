@@ -1,4 +1,5 @@
 #include "telemetry/TelemetryLogger.h"
+#include <filesystem>
 #include <sstream>
 #include <cmath>
 
@@ -57,6 +58,11 @@ void TelemetryLogger::logToConsole(const SimulationState& state, bool verbose) {
 }
 
 void TelemetryLogger::exportToCSV(const LapResult& result, const std::string& filename) {
+    const std::filesystem::path output_path(filename);
+    if (output_path.has_parent_path()) {
+        std::filesystem::create_directories(output_path.parent_path());
+    }
+
     std::ofstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Error: Could not open file " << filename << " for writing" << std::endl;
@@ -113,6 +119,11 @@ void TelemetryLogger::exportToCSV(const LapResult& result, const std::string& fi
 }
 
 void TelemetryLogger::exportToJSON(const LapResult& result, const std::string& filename) {
+    const std::filesystem::path output_path(filename);
+    if (output_path.has_parent_path()) {
+        std::filesystem::create_directories(output_path.parent_path());
+    }
+
     std::ofstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Error: Could not open file " << filename << " for writing" << std::endl;
@@ -130,7 +141,8 @@ void TelemetryLogger::exportToJSON(const LapResult& result, const std::string& f
         file << "    {\n";
         file << "      \"timestamp\": " << state.timestamp << ",\n";
         file << "      \"position\": {\"x\": " << state.x << ", \"y\": " << state.y 
-             << ", \"z\": " << state.z << ", \"s\": " << state.s << "},\n";
+             << ", \"z\": " << state.z << ", \"s\": " << state.s
+             << ", \"n\": " << state.n << "},\n";
         file << "      \"velocity\": {\"ms\": " << state.v << ", \"kmh\": " << state.v_kmh << "},\n";
         file << "      \"acceleration\": {\"longitudinal\": " << state.ax 
              << ", \"lateral\": " << state.ay << ", \"vertical\": " << state.az << "},\n";
@@ -139,9 +151,13 @@ void TelemetryLogger::exportToJSON(const LapResult& result, const std::string& f
         file << "      \"controls\": {\"throttle_pct\": " << (state.throttle * 100) 
              << ", \"brake_pct\": " << (state.brake * 100) 
              << ", \"steering_rad\": " << state.steering_angle << "},\n";
-        file << "      \"powertrain\": {\"gear\": " << state.gear << ", \"rpm\": " << state.rpm << "},\n";
+        file << "      \"powertrain\": {\"gear\": " << state.gear << ", \"rpm\": " << state.rpm
+             << ", \"engine_torque\": " << state.engine_torque
+             << ", \"wheel_force\": " << state.wheel_force << "},\n";
         file << "      \"forces\": {\"drag\": " << state.drag_force << ", \"downforce\": " 
-             << state.downforce << ", \"vertical_load\": " << state.vertical_load << "},\n";
+             << state.downforce << ", \"vertical_load\": " << state.vertical_load
+             << ", \"tire_longitudinal\": " << state.tire_force_x
+             << ", \"tire_lateral\": " << state.tire_force_y << "},\n";
         file << "      \"track\": {\"curvature\": " << state.curvature << ", \"radius\": " 
              << state.radius << ", \"banking\": " << state.banking_angle << "}\n";
         file << "    }";

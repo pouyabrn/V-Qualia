@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 import uvicorn
 import os
 import json
+import shutil
 import pandas as pd
 from typing import Optional, List
 from datetime import datetime
@@ -16,14 +17,61 @@ PLACEHOLDER_AUTH = "ididntwriteauthsystemyetLOL"
 
 # setup data directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CARS_DIR = os.path.join(DATA_DIR, "cars")
 TRACKS_DIR = os.path.join(DATA_DIR, "tracks")
 PREDICTIONS_DIR = os.path.join(DATA_DIR, "predictions")
+ROOT_CARS_DIR = os.path.join(ROOT_DIR, "cars")
+ENGINE_EXAMPLES_DIR = os.path.join(BASE_DIR, "engine", "examples")
 
 # make sure directories exist
 for directory in [DATA_DIR, CARS_DIR, TRACKS_DIR, PREDICTIONS_DIR]:
     os.makedirs(directory, exist_ok=True)
+
+
+def _load_car_name(filepath: str) -> str:
+    """Read the car display name from JSON, falling back to filename stem."""
+    try:
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data.get("name"):
+            return str(data["name"])
+    except Exception:
+        pass
+    return os.path.splitext(os.path.basename(filepath))[0]
+
+
+def seed_example_cars() -> None:
+    """Seed API car storage from root cars dir and engine examples when files are missing."""
+
+    existing_names = set()
+    for filename in os.listdir(CARS_DIR):
+        if filename.endswith(".json"):
+            existing_names.add(_load_car_name(os.path.join(CARS_DIR, filename)).lower())
+
+    source_dirs = [ROOT_CARS_DIR, ENGINE_EXAMPLES_DIR]
+    for source_dir in source_dirs:
+        if not os.path.isdir(source_dir):
+            continue
+
+        for filename in os.listdir(source_dir):
+            if not filename.endswith(".json"):
+                continue
+            source_path = os.path.join(source_dir, filename)
+            target_path = os.path.join(CARS_DIR, filename)
+            source_name = _load_car_name(source_path).lower()
+
+            # Skip duplicate display names to prevent duplicate entries in the UI.
+            if source_name in existing_names and not os.path.exists(target_path):
+                continue
+
+            if not os.path.exists(target_path):
+                shutil.copy2(source_path, target_path)
+                existing_names.add(source_name)
+
+
+seed_example_cars()
 
 app = FastAPI(
     title="V-Qualia API",
@@ -115,13 +163,16 @@ async def health():
 async def get_cars(auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    cars = []
+    cars_by_name = {}
     for filename in os.listdir(CARS_DIR):
         if filename.endswith(".json"):
             with open(os.path.join(CARS_DIR, filename), "r") as f:
                 car_data = json.load(f)
-                cars.append(car_data)
-    
+                car_name = car_data.get("name", filename.replace(".json", ""))
+                if car_name not in cars_by_name:
+                    cars_by_name[car_name] = car_data
+
+    cars = list(cars_by_name.values())
     return {"success": True, "cars": cars, "count": len(cars)}
 
 @app.get("/api/cars/{car_name}")
@@ -443,7 +494,7 @@ async def predict_lap(request: PredictionRequest, auth: str = Header(None, alias
         if not is_engine_built():
             raise HTTPException(
                 status_code=503,
-                detail="prediction engine not built. run build.bat in backend/engine/ first"
+                detail="prediction engine not built. run ./build.sh (Linux/macOS) or build.bat (Windows) in backend/engine/ first"
             )
         
         # run prediction (this takes ~8+ seconds minimum)
@@ -476,7 +527,7 @@ async def prediction_status(auth: str = Header(None, alias="Authorization")):
     return {
         "engine_built": engine_ready,
         "ready": engine_ready,
-        "message": "engine ready" if engine_ready else "engine not built - run build.bat"
+        "message": "engine ready" if engine_ready else "engine not built - run ./build.sh or build.bat"
     }
 
 

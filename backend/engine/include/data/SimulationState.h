@@ -105,6 +105,9 @@ public:
      */
     double getLapTime() const { return lap_time_; }
     void setLapTime(double time) { lap_time_ = time; }
+
+    double getTotalDistance() const { return total_distance_; }
+    void setTotalDistance(double distance) { total_distance_ = distance; }
     
     /**
      * @brief Get maximum speed achieved
@@ -134,8 +137,8 @@ public:
 private:
     std::vector<SimulationState> states_;
     double lap_time_;
+    double total_distance_;
 };
 
 } // namespace LapTimeSim
-
 

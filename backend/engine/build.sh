@@ -6,34 +6,47 @@
 echo "Building Lap Time Simulator..."
 echo "=============================="
 
-# Create build directory if it doesn't exist
 mkdir -p build
 
-# Navigate to build directory
-cd build
+if command -v cmake >/dev/null 2>&1; then
+    cd build || exit 1
 
-# Run CMake
-echo "Running CMake..."
-cmake ..
+    echo "Running CMake..."
+    cmake ..
+    if [ $? -ne 0 ]; then
+        echo "❌ CMake failed!"
+        exit 1
+    fi
 
-# Check if CMake succeeded
-if [ $? -ne 0 ]; then
-    echo "❌ CMake failed!"
-    exit 1
+    echo "Compiling..."
+    make -j"$(nproc)"
+    if [ $? -ne 0 ]; then
+        echo "❌ Build failed!"
+        exit 1
+    fi
+
+    cd ..
+else
+    echo "CMake not found. Falling back to direct g++ build..."
+    g++ -std=c++17 -O3 -Wall -Wextra -Wpedantic \
+        -Iinclude \
+        src/main.cpp \
+        src/data/TrackData.cpp \
+        src/data/VehicleParams.cpp \
+        src/data/SimulationState.cpp \
+        src/physics/AerodynamicsModel.cpp \
+        src/physics/TireModel.cpp \
+        src/physics/PowertrainModel.cpp \
+        src/solver/GGVGenerator.cpp \
+        src/solver/QuasiSteadyStateSolver.cpp \
+        src/telemetry/TelemetryLogger.cpp \
+        src/io/JSONParser.cpp \
+        -o build/lap_sim
+    if [ $? -ne 0 ]; then
+        echo "❌ Build failed!"
+        exit 1
+    fi
 fi
-
-# Build with make (use all available CPU cores)
-echo "Compiling..."
-make -j$(nproc)
-
-# Check if build succeeded
-if [ $? -ne 0 ]; then
-    echo "❌ Build failed!"
-    exit 1
-fi
-
-# Go back to project root
-cd ..
 
 echo ""
 echo "✅ Build successful!"
@@ -41,5 +54,4 @@ echo ""
 echo "To run the simulator:"
 echo "  ./build/lap_sim examples/montreal.csv examples/f1_2025.json"
 echo ""
-
 

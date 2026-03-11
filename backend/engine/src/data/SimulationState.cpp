@@ -74,7 +74,7 @@ std::string SimulationState::toString() const {
     return oss.str();
 }
 
-LapResult::LapResult() : lap_time_(0.0) {
+LapResult::LapResult() : lap_time_(0.0), total_distance_(0.0) {
 }
 
 void LapResult::addState(const SimulationState& state) {
@@ -92,17 +92,8 @@ double LapResult::getMaxSpeed() const {
 }
 
 double LapResult::getAverageSpeed() const {
-    if (states_.empty() || lap_time_ <= 0.0) return 0.0;
-    
-    // Assuming states represent equal distance segments
-    // Average speed = Total distance / Total time
-    // For a lap, we can estimate from the last state's arc length
-    if (!states_.empty()) {
-        double total_distance = states_.back().s;
-        return total_distance / lap_time_;
-    }
-    
-    return 0.0;
+    if (lap_time_ <= 0.0 || total_distance_ <= 0.0) return 0.0;
+    return total_distance_ / lap_time_;
 }
 
 void LapResult::getMaxGForces(double& max_gx, double& max_gy, double& max_g_total) const {
@@ -120,6 +111,7 @@ void LapResult::getMaxGForces(double& max_gx, double& max_gy, double& max_g_tota
 void LapResult::clear() {
     states_.clear();
     lap_time_ = 0.0;
+    total_distance_ = 0.0;
 }
 
 } // namespace LapTimeSim

@@ -1,0 +1,46 @@
+{
+  "name": "F1_2024_Monza",
+  "mass": {
+    "mass": 798.0,
+    "cog_height": 0.25,
+    "wheelbase": 3.60,
+    "weight_distribution": 0.46
+  },
+  "aerodynamics": {
+    "Cl": -3.2,
+    "Cd": 0.80,
+    "frontal_area": 1.42,
+    "air_density": 1.225
+  },
+  "tire": {
+    "mu_x": 1.93,
+    "mu_y": 2.30,
+    "load_sensitivity": 0.76,
+    "tire_radius": 0.33
+  },
+  "powertrain": {
+    "engine_torque_curve": {
+      "5000": 360,
+      "6000": 392,
+      "7000": 423,
+      "8000": 448,
+      "9000": 472,
+      "10000": 492,
+      "11000": 507,
+      "12000": 512,
+      "13000": 510,
+      "14000": 498,
+      "15000": 475
+    },
+    "gear_ratios": [10.1, 8.4, 7.0, 6.0, 5.35, 4.75, 4.25, 3.82],
+    "final_drive": 1.35,
+    "efficiency": 0.98,
+    "max_rpm": 15000,
+    "min_rpm": 5000,
+    "shift_time": 0.035
+  },
+  "brake": {
+    "max_brake_force": 32800,
+    "brake_bias": 0.63
+  }
+}

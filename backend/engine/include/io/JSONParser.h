@@ -3,7 +3,6 @@
 #include "data/TrackData.h"
 #include "data/VehicleParams.h"
 #include <string>
-#include <json/json.h>
 
 namespace LapTimeSim {
 
@@ -90,29 +89,6 @@ public:
      * @return VehicleParams object
      */
     static VehicleParams parseVehicleJSON(const std::string& filepath);
-
-private:
-    /**
-     * @brief Read JSON file and return root value
-     */
-    static Json::Value readJSONFile(const std::string& filepath);
-    
-    /**
-     * @brief Get double value with default
-     */
-    static double getDouble(const Json::Value& value, const std::string& key, double default_val);
-    
-    /**
-     * @brief Get int value with default
-     */
-    static int getInt(const Json::Value& value, const std::string& key, int default_val);
-    
-    /**
-     * @brief Get string value with default
-     */
-    static std::string getString(const Json::Value& value, const std::string& key, 
-                                 const std::string& default_val);
 };
 
 } // namespace LapTimeSim
-

@@ -49,9 +49,9 @@ int PowertrainParams::getOptimalGear(double velocity, double tire_radius, double
     
     const double PI = 3.14159265358979323846;
     
-    // Target RPM range: 70-90% of max RPM for best power/efficiency balance
-    double optimal_rpm_low = max_rpm * 0.70;
-    double optimal_rpm_high = max_rpm * 0.90;
+    const double clamped_target_rpm = std::clamp(target_rpm, min_rpm, max_rpm);
+    const double optimal_rpm_low = std::max(min_rpm, clamped_target_rpm * 0.90);
+    const double optimal_rpm_high = std::min(max_rpm, clamped_target_rpm * 1.05);
     
     // Calculate RPM for all gears
     std::vector<double> rpms(gear_ratios.size());
@@ -61,7 +61,7 @@ int PowertrainParams::getOptimalGear(double velocity, double tire_radius, double
     
     // Strategy 1: Find highest gear (lowest ratio) with RPM in optimal range
     for (int i = static_cast<int>(gear_ratios.size()) - 1; i >= 0; --i) {
-        if (rpms[i] >= optimal_rpm_low && rpms[i] <= max_rpm) {
+        if (rpms[i] >= optimal_rpm_low && rpms[i] <= optimal_rpm_high) {
             return i + 1;
         }
     }
@@ -249,5 +249,4 @@ double VehicleParams::getMaxTheoreticalSpeed() const {
 }
 
 } // namespace LapTimeSim
-
 

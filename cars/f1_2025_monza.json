@@ -1,5 +1,5 @@
 {
-  "name": "F1_2025_Normal",
+  "name": "F1_2025_Monza",
   "mass": {
     "mass": 800.0,
     "cog_height": 0.25,
@@ -7,8 +7,8 @@
     "weight_distribution": 0.46
   },
   "aerodynamics": {
-    "Cl": -4.2,
-    "Cd": 0.95,
+    "Cl": -3.3,
+    "Cd": 0.78,
     "frontal_area": 1.42,
     "air_density": 1.225
   },
@@ -32,15 +32,15 @@
       "14000": 505,
       "15000": 482
     },
-    "gear_ratios": [10.8, 8.9, 7.4, 6.4, 5.7, 5.1, 4.5, 3.9],
-    "final_drive": 1.38,
+    "gear_ratios": [10.0, 8.3, 6.9, 5.95, 5.3, 4.7, 4.2, 3.8],
+    "final_drive": 1.34,
     "efficiency": 0.98,
     "max_rpm": 15000,
     "min_rpm": 5000,
     "shift_time": 0.035
   },
   "brake": {
-    "max_brake_force": 32000,
-    "brake_bias": 0.62
+    "max_brake_force": 33000,
+    "brake_bias": 0.63
   }
 }

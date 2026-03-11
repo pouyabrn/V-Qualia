@@ -108,7 +108,7 @@ const PredictPage = () => {
 
     // check engine status first
     if (!engineStatus || !engineStatus.ready) {
-      alert('Prediction engine not ready! Please build the engine first (run build.bat in backend/engine/)');
+      alert('Prediction engine not ready! Please build the engine first (run ./build.sh on Linux/macOS or build.bat on Windows in backend/engine/)');
       return;
     }
 
@@ -252,7 +252,7 @@ const PredictPage = () => {
       <div>
         <p className="text-yellow-300 font-semibold">Prediction Engine Not Built</p>
         <p className="text-yellow-400/80 text-sm">
-          Run <code className="px-1 bg-black/30 rounded">build.bat</code> in the <code className="px-1 bg-black/30 rounded">backend/engine/</code> directory to build the prediction engine.
+          Run <code className="px-1 bg-black/30 rounded">./build.sh</code> (Linux/macOS) or <code className="px-1 bg-black/30 rounded">build.bat</code> (Windows) in <code className="px-1 bg-black/30 rounded">backend/engine/</code> to build the prediction engine.
         </p>
       </div>
     </div>
@@ -550,5 +550,4 @@ const PredictPage = () => {
 };
 
 export default PredictPage;
-
 
