@@ -16,4 +16,6 @@ Validation:
 - npm audit: zero reported vulnerabilities after dependency cleanup and the Vite update.
 - [Local API measurements](integration_results.json): cold geometry preparation, default 1.225 kg/m³ density, 2 m resolution, export included. These are numerical predictions, not matched measured-lap validation.
 
-Local C++ builds were tested with GCC/WSL. A native MSVC build was not tested. Docker Desktop was not running locally, so the complete container build still needs verification on the deployment builder. Frontend/browser and direct backend integration are tested independently.
+Local C++ builds were tested with GCC/WSL. A native MSVC build was not tested. Docker Desktop was not running locally, so no complete local container build was run. Both GitHub CI jobs passed, and the existing Render backend served the pinned engine and new application revision. The deployed frontend produced telemetry and a GGV map through the public API; the 3D map and inline replay were inspected in the browser. The 3D view also exports its current projection as a PNG with physical axis labels.
+
+Deployed numerical checks are recorded in [deployment_results.json](deployment_results.json). Hosted cold geometry preparation is much slower than a prepared library solve. For example, the first Monza prediction took about 13 s on the shared service; a cached repeat with GGV export took about 0.94 s. These are web service measurements, not real-time library guarantees.

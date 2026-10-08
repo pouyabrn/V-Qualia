@@ -10,7 +10,7 @@ This is meant to feel like an engineering tool: setup on the left, physical chan
 - Simulated telemetry: speed, controls, acceleration, axle loads, tire usage, geometry and hybrid deployment.
 - Lap replay inside the workspace, with an optional separate window. Playback follows timestamps.
 - Circuit-filling animation during a solve, using soft blue/cyan tones. Replay fills the circuit with actual lap progress.
-- Rotatable 3D GGV acceleration/braking surfaces, alongside velocity slices and straight-line envelopes, with feasibility flags and ERS/DRS conditions.
+- Rotatable 3D GGV acceleration/braking surfaces with PNG export, alongside velocity slices and straight-line envelopes, with feasibility flags and ERS/DRS conditions.
 - Measured or simulated CSV inspection and distance-aligned lap comparison, including elapsed-time delta.
 - Vehicle and circuit libraries. Vehicle editing preserves advanced engine parameters.
 

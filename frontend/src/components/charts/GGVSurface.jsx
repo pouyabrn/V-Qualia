@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { Download, RotateCcw } from 'lucide-react';
 import { ChartFrame } from './ScientificCharts';
 
 // Orthographic scientific surface. Redraw only on resize/data/view changes; no idle render loop.
@@ -42,7 +42,7 @@ export default function GGVSurface({ data }) {
     const canvas = canvasRef.current; if (!canvas || !size.width || !size.height) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     canvas.width = Math.round(size.width * dpr); canvas.height = Math.round(size.height * dpr);
-    const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, size.width, size.height);
+    const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.fillStyle = '#141d26'; ctx.fillRect(0, 0, size.width, size.height);
     const az = view.azimuth * Math.PI / 180, el = view.elevation * Math.PI / 180;
     const scale = Math.min(size.width / 1.7, size.height / 1.8), cx = size.width * .51, cy = size.height * .48;
     const project = ([x, y, z]) => {
@@ -74,12 +74,18 @@ export default function GGVSurface({ data }) {
       label([-.5, -.5, (i - 1) * .6], `${((i - 1) * mesh.zmax / 9.81).toFixed(1)}`, -26, -5);
     }
     label([.58, -.5, 0], 'V / km/h', 0, 14); label([-.5, .58, 0], 'Ay / g', -15, -8); label([-.5, -.5, .69], 'Ax / g', -15, -4);
+    ctx.fillStyle = '#b4c9d5'; ctx.font = '11px Consolas, monospace'; ctx.fillText('GGV · Acceleration (cyan) / braking (purple)', 15, 20);
     ctx.fillStyle = '#839da9'; ctx.font = '10px Consolas, monospace'; ctx.fillText('ORTHOGRAPHIC · drag to rotate', 15, size.height - 12);
   }, [mesh, size, view]);
+  const exportPNG = () => {
+    const link = document.createElement('a'); link.download = 'GGV-surface.png';
+    link.href = canvasRef.current.toDataURL('image/png'); link.click();
+  };
   return <div className="ggv-surface"><div className="surface-controls"><span><i className="surface-key accel" />Acceleration <i className="surface-key brake" />Braking</span>
     <label>Azimuth<input aria-label="Surface azimuth" type="range" min="-180" max="180" value={view.azimuth} onChange={e => setView(v => ({ ...v, azimuth: Number(e.target.value) }))} />{view.azimuth.toFixed(0)}°</label>
     <label>Elevation<input aria-label="Surface elevation" type="range" min="5" max="85" value={view.elevation} onChange={e => setView(v => ({ ...v, elevation: Number(e.target.value) }))} />{view.elevation.toFixed(0)}°</label>
-    <button className="icon-button" aria-label="Reset 3D view" onClick={() => setView({ azimuth: -35, elevation: 28 })}><RotateCcw size={14} /></button></div>
+    <button className="icon-button" aria-label="Reset 3D view" onClick={() => setView({ azimuth: -35, elevation: 28 })}><RotateCcw size={14} /></button>
+    <button className="button secondary" onClick={exportPNG}><Download size={14} />Export PNG</button></div>
     <ChartFrame title="3D GGV surface" units="V / km/h · Ay / g · Ax / g" formula="Feasible acceleration and braking branches. Axes normalized to fit; ticks show physical values. Lateral magnitude is mirrored. Display mesh is reduced; 2D slices retain all samples.">
       <canvas ref={canvasRef} className="surface-canvas" role="img" aria-label="Rotatable three-dimensional GGV acceleration and braking envelope" onPointerDown={e => { drag.current = { x: e.clientX, y: e.clientY, ...view }; e.currentTarget.setPointerCapture(e.pointerId); }}
         onPointerMove={e => { if (drag.current) { const d = drag.current; setView({ azimuth: Math.max(-180, Math.min(180, d.azimuth + (e.clientX - d.x) * .4)), elevation: Math.max(5, Math.min(85, d.elevation + (e.clientY - d.y) * .3)) }); } }}

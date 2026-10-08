@@ -1,0 +1,54 @@
+{
+  "verified_at": "2026-10-08T14:53:34.700343+00:00",
+  "api": "https://v-qualia-backend.onrender.com",
+  "deployment_commit": "bcb743fa2c636200aed9f4501de695a926158b19",
+  "engine_commit": "0d4c161054643f08eac32faed7d0867f675c980c",
+  "note": "Numerical smoke tests at 2 m, 1.225 kg/m3; not measured-lap accuracy evidence.",
+  "runs": [
+    {
+      "car": "F1_2025_Quali_LowDF",
+      "track": "Monza",
+      "lap_time_s": 78.83898225,
+      "solve_ms": 322.262333,
+      "wall_ms": 940.7384842634201,
+      "telemetry_file": "F1_2025_Quali_LowDF_Monza_f3089cd9d95c.csv",
+      "samples": 2882
+    },
+    {
+      "car": "F1_2024_Quali_MediumDF",
+      "track": "Suzuka",
+      "lap_time_s": 89.04387913,
+      "solve_ms": 34663.24794,
+      "wall_ms": 35163.97096961737,
+      "telemetry_file": "F1_2024_Quali_MediumDF_Suzuka_c4d0e4a20a62.csv",
+      "samples": 2875
+    },
+    {
+      "car": "F2_2024_Quali_highdf",
+      "track": "Budapest",
+      "lap_time_s": 87.24822691,
+      "solve_ms": 29595.01558,
+      "wall_ms": 29895.427741110325,
+      "telemetry_file": "F2_2024_Quali_highdf_Budapest_22bb43dfe4c9.csv",
+      "samples": 2178
+    },
+    {
+      "car": "Honda_Civic_Si_2025",
+      "track": "Silverstone",
+      "lap_time_s": 156.0869941,
+      "solve_ms": 28141.97717,
+      "wall_ms": 28452.581387013197,
+      "telemetry_file": "Honda_Civic_Si_2025_Silverstone_3678c9adb1ff.csv",
+      "samples": 2914
+    },
+    {
+      "car": "FSAE_RoadCourse",
+      "track": "Shanghai",
+      "lap_time_s": 132.6352578,
+      "solve_ms": 28374.35387,
+      "wall_ms": 28871.225215494633,
+      "telemetry_file": "FSAE_RoadCourse_Shanghai_22e250c8996a.csv",
+      "samples": 2715
+    }
+  ]
+}
