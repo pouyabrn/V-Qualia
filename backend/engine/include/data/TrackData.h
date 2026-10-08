@@ -97,6 +97,16 @@ public:
      */
     bool isPreprocessed() const { return preprocessed_; }
 
+    /**
+     * @brief Overwrite the banking angle (radians, positive = towards the inside of the turn) of a point
+     */
+    void setBankingAt(size_t index, double banking);
+
+    /**
+     * @brief Overwrite the elevation (m) of a point. Marks the track as needing preprocess() again.
+     */
+    void setElevationAt(size_t index, double z);
+
 private:
     std::vector<TrackPoint> points_;
     double total_length_;

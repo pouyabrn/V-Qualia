@@ -6,6 +6,8 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
+.pydeps/
 ENV/
 build/
 dist/
@@ -29,6 +31,9 @@ backend/__pycache__/
 backend/data/cars/*.json
 backend/data/tracks/*.csv
 backend/data/predictions/*.csv
+backend/data/predictions/*.json
+backend/data/line_cache/
+*Zone.Identifier
 
 # Prediction Engine
 backend/engine/build/

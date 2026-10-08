@@ -12,6 +12,10 @@ TrackData::TrackData()
 void TrackData::addPoint(double x, double y, double z, 
                          double w_left, double w_right, 
                          double banking) {
+    for (double value : {x, y, z, w_left, w_right, banking}) {
+        if (!std::isfinite(value)) throw std::invalid_argument("Track coordinates and widths must be finite");
+    }
+    if (w_left <= 0.0 || w_right <= 0.0) throw std::invalid_argument("Track half-widths must be positive");
     TrackPoint point;
     point.x = x;
     point.y = y;
@@ -30,6 +34,9 @@ void TrackData::preprocess() {
     }
     
     calculateArcLength();
+    if (!std::isfinite(total_length_) || total_length_ <= 0.0) {
+        throw std::runtime_error("Track length must be positive and finite");
+    }
     calculateHeading();
     calculateCurvature();
     
@@ -99,6 +106,23 @@ double TrackData::normalizeAngle(double angle) {
     while (angle > PI) angle -= 2.0 * PI;
     while (angle < -PI) angle += 2.0 * PI;
     return angle;
+}
+
+void TrackData::setBankingAt(size_t index, double banking) {
+    if (!std::isfinite(banking)) throw std::invalid_argument("Banking must be finite");
+    if (index >= points_.size()) {
+        throw std::out_of_range("Track point index out of range");
+    }
+    points_[index].banking = banking;
+}
+
+void TrackData::setElevationAt(size_t index, double z) {
+    if (!std::isfinite(z)) throw std::invalid_argument("Elevation must be finite");
+    if (index >= points_.size()) {
+        throw std::out_of_range("Track point index out of range");
+    }
+    points_[index].z = z;
+    preprocessed_ = false;
 }
 
 const TrackPoint& TrackData::getPoint(size_t index) const {

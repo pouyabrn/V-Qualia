@@ -1,7 +1,7 @@
 // API utility for talking to backend
 // yeah we just hardcode the auth token for now lol
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const AUTH_TOKEN = 'ididntwriteauthsystemyetLOL';
 
 // helper to make requests easier
@@ -15,8 +15,8 @@ const apiRequest = async (endpoint, options = {}) => {
   };
 
   const response = await fetch(`${API_URL}${endpoint}`, {
-    ...defaultOptions,
     ...options,
+    ...defaultOptions,
   });
 
   if (!response.ok) {
@@ -136,12 +136,13 @@ export const predictionsAPI = {
   },
 
   // run prediction (car name + track name)
-  predict: async (carName, trackName) => {
+  predict: async (carName, trackName, options = {}) => {
     return apiRequest('/api/predict', {
       method: 'POST',
       body: JSON.stringify({
         car_name: carName,
         track_name: trackName,
+        ...options,
       }),
     });
   },

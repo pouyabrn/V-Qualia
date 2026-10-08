@@ -1,0 +1,43 @@
+{
+  "review_date": "2026-10-08",
+  "baseline_commit": "d69e258253653bcc39224534282ae0a603326ff7",
+  "baseline_url": "https://github.com/pouyabrn/LapPredictionEngine/tree/d69e258253653bcc39224534282ae0a603326ff7",
+  "original_source_files_verified": 21,
+  "compiler": "GCC 13.3, C++17, CMake Release (-O3 -DNDEBUG), WSL2 Ubuntu x86_64",
+  "cpu": "Intel Core Ultra 7 255H",
+  "calibration_cases_f1": [
+    "monza",
+    "montreal",
+    "zandvoort",
+    "shanghai"
+  ],
+  "f1_frozen_parameters": {
+    "combined_exp": 1.574920916385723,
+    "torque_scale": 0.9073726718933639,
+    "recovery_kw": 28.309327645199208,
+    "drs_drag": 0.32348910378995466,
+    "brake_force": 33318.686839281305,
+    "rear_mu": 1.0798341335634343,
+    "bank_t3": 9.2014526860502,
+    "bank_t14": 17.845193498666628,
+    "mu_y@2024": 2.068359098522383,
+    "mu_y@2025": 2.2030411559473997,
+    "mu_x@2024": 1.9470352829713469,
+    "mu_x@2025": 2.0674244997879057,
+    "ClA_lowdf@2024": 4.780842882287,
+    "ClA_lowdf@2025": 4.274310975665218,
+    "dClA_mediumdf@2024": 8.790998513617856e-11,
+    "dClA_mediumdf@2025": 0.3576434088230284,
+    "dClA_highdf@2024": 1.0233193693265907,
+    "dClA_highdf@2025": 0.6857580797165148,
+    "CdA_lowdf@2024": 1.35387434896001,
+    "CdA_lowdf@2025": 1.3230525800912134,
+    "dCdA_mediumdf@2024": 0.35899729573402533,
+    "dCdA_mediumdf@2025": 0.34960201312389644,
+    "dCdA_highdf@2024": 0.17947106847995442,
+    "dCdA_highdf@2025": 0.2139069339788366
+  },
+  "banking_note": "Zandvoort angles are effective fitted averages for the coarse centreline, not surveyed peak angles.",
+  "holdout_note": "F1 holdout tracks excluded from car-parameter fitting. Track elevation and DRS sidecars use observed session data; not fully blind forecasts.",
+  "road_car_note": "Civic Si and Formula Student checks verify numerical behavior, not real-world lap accuracy."
+}

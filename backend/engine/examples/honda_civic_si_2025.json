@@ -35,7 +35,8 @@
     "efficiency": 0.90,
     "max_rpm": 6500,
     "min_rpm": 1200,
-    "shift_time": 0.25
+    "shift_time": 0.25,
+    "drive": "FWD"
   },
   "brake": {
     "max_brake_force": 15000,

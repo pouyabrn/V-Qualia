@@ -76,7 +76,8 @@ void TelemetryLogger::exportToCSV(const LapResult& result, const std::string& fi
          << "throttle_pct,brake_pct,steering_angle_rad,"
          << "gear,rpm,engine_torque_nm,wheel_force_n,"
          << "drag_force_n,downforce_n,tire_force_long_n,tire_force_lat_n,vertical_load_n,"
-         << "curvature_inv_m,radius_m,banking_rad\n";
+         << "curvature_inv_m,radius_m,banking_rad,"
+         << "ers_power_kw,drs_open,grip_usage,fz_front_n,fz_rear_n\n";
     
     // Data rows
     const auto& states = result.getStates();
@@ -111,7 +112,12 @@ void TelemetryLogger::exportToCSV(const LapResult& result, const std::string& fi
              << state.vertical_load << ","
              << state.curvature << ","
              << state.radius << ","
-             << state.banking_angle << "\n";
+             << state.banking_angle << ","
+             << (state.ers_power / 1000.0) << ","
+             << (state.drs_open ? 1 : 0) << ","
+             << state.grip_usage << ","
+             << state.fz_front << ","
+             << state.fz_rear << "\n";
     }
     
     file.close();
@@ -140,7 +146,7 @@ void TelemetryLogger::exportToJSON(const LapResult& result, const std::string& f
         
         file << "    {\n";
         file << "      \"timestamp\": " << state.timestamp << ",\n";
-        file << "      \"position\": {\"x\": " << state.x << ", \"y\": " << state.y 
+        file << "      \"position\": {\"x\": " << state.x << ", \"y\": " << state.y
              << ", \"z\": " << state.z << ", \"s\": " << state.s
              << ", \"n\": " << state.n << "},\n";
         file << "      \"velocity\": {\"ms\": " << state.v << ", \"kmh\": " << state.v_kmh << "},\n";
@@ -154,12 +160,17 @@ void TelemetryLogger::exportToJSON(const LapResult& result, const std::string& f
         file << "      \"powertrain\": {\"gear\": " << state.gear << ", \"rpm\": " << state.rpm
              << ", \"engine_torque\": " << state.engine_torque
              << ", \"wheel_force\": " << state.wheel_force << "},\n";
-        file << "      \"forces\": {\"drag\": " << state.drag_force << ", \"downforce\": " 
+        file << "      \"forces\": {\"drag\": " << state.drag_force << ", \"downforce\": "
              << state.downforce << ", \"vertical_load\": " << state.vertical_load
              << ", \"tire_longitudinal\": " << state.tire_force_x
              << ", \"tire_lateral\": " << state.tire_force_y << "},\n";
         file << "      \"track\": {\"curvature\": " << state.curvature << ", \"radius\": " 
-             << state.radius << ", \"banking\": " << state.banking_angle << "}\n";
+             << state.radius << ", \"banking\": " << state.banking_angle << "},\n";
+        file << "      \"energy\": {\"ers_power_kw\": " << (state.ers_power / 1000.0)
+             << ", \"drs_open\": " << (state.drs_open ? "true" : "false")
+             << ", \"grip_usage\": " << state.grip_usage
+             << ", \"fz_front\": " << state.fz_front
+             << ", \"fz_rear\": " << state.fz_rear << "}\n";
         file << "    }";
         
         if (i < states.size() - 1) {

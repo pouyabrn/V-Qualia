@@ -36,9 +36,8 @@ echo   Executable: build\Release\lap_sim.exe
 echo ================================================================
 echo.
 echo To run the simulation:
-echo   build\Release\lap_sim.exe examples\simple_track.json examples\formula_car.json
+echo   build\Release\lap_sim.exe examples\montreal.csv examples\f1_2025.json
 echo.
 
 cd ..
-
 

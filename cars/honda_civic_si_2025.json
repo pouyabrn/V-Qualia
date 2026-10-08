@@ -19,6 +19,7 @@
     "tire_radius": 0.315
   },
   "powertrain": {
+    "drive": "FWD",
     "engine_torque_curve": {
       "1200": 180,
       "1800": 260,

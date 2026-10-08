@@ -1,0 +1,25 @@
+name: Validate engineering workspace
+on: [push, pull_request]
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci && npm test && npm run lint && npm run build
+        working-directory: frontend
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r backend/requirements-dev.txt
+      - run: cmake -S backend/engine -B backend/engine/build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF && cmake --build backend/engine/build -j2
+      - run: python test_integration.py -v
+        working-directory: backend

@@ -1,0 +1,85 @@
+{
+  "name": "F1_2024_Quali_LowDF",
+  "notes": "2024 ground-effect F1 car in qualifying trim, low-drag Monza package. Same chassis / PU / tyres as f1_2024_quali_mediumdf.json, only the wing level changes.",
+  "mass": {
+    "mass": 805.0,
+    "cog_height": 0.27,
+    "wheelbase": 3.6,
+    "weight_distribution": 0.455,
+    "track_width_front": 1.64,
+    "track_width_rear": 1.58,
+    "vehicle_width": 2.0,
+    "lltd_front": 0.5
+  },
+  "aerodynamics": {
+    "ClA": 4.781,
+    "CdA": 1.354,
+    "frontal_area": 1.0,
+    "air_density": 1.2,
+    "aero_balance": 0.42,
+    "drs": {
+      "enabled": true,
+      "drag_reduction": 0.3235,
+      "downforce_reduction": 0.08,
+      "max_zones": 2
+    }
+  },
+  "tire": {
+    "mu_x": 1.947,
+    "mu_y": 2.0684,
+    "load_sensitivity": 0.85,
+    "tire_radius": 0.355,
+    "combined_exponent": 1.5749,
+    "rolling_resistance": 0.012,
+    "wheel_inertia": 1.5,
+    "rear_mu_scale": 1.0798
+  },
+  "powertrain": {
+    "engine_torque_curve": {
+      "4000": 609,
+      "5000": 593,
+      "6000": 582,
+      "7000": 575,
+      "8000": 569,
+      "9000": 565,
+      "10000": 561,
+      "10500": 559,
+      "11000": 534,
+      "11500": 507,
+      "12000": 477,
+      "12500": 447,
+      "13000": 415
+    },
+    "gear_ratios": [
+      15.0,
+      11.6,
+      9.55,
+      8.1,
+      7.0,
+      6.1,
+      5.32,
+      4.62
+    ],
+    "final_drive": 1.0,
+    "efficiency": 0.95,
+    "max_rpm": 13000,
+    "min_rpm": 4000,
+    "shift_time": 0.0,
+    "engine_inertia": 0.04,
+    "drive": "RWD",
+    "ers": {
+      "max_power_kw": 120,
+      "energy_per_lap_mj": 4.0,
+      "recovery_power_kw": 28.3093
+    },
+    "torque_scale": 0.9074
+  },
+  "brake": {
+    "max_brake_force": 33318.7,
+    "brake_bias": 0.57,
+    "ideal_bias": false
+  },
+  "racing_line": {
+    "edge_margin": -0.4
+  }
+}

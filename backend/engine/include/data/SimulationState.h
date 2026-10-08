@@ -51,6 +51,13 @@ struct SimulationState {
     double curvature;           // Track curvature at current position (1/m)
     double radius;              // Turn radius (m) - infinite for straight
     double banking_angle;       // Track banking angle (radians)
+
+    // Energy, aero devices and tyre utilisation
+    double ers_power;           // ERS deployment at the crank (W)
+    bool drs_open;              // DRS flap open
+    double grip_usage;          // Combined friction utilisation (0-1)
+    double fz_front;            // Front axle vertical load (N)
+    double fz_rear;             // Rear axle vertical load (N)
     
     // Time
     double timestamp;           // Time since lap start (s)

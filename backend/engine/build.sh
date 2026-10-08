@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Lap Time Simulator - Build Script for Linux/Ubuntu/Mac
+# Lap Time Simulator - Build Script for Linux/Ubuntu/macOS
 # Usage: ./build.sh
 
 echo "Building Lap Time Simulator..."
@@ -19,7 +19,15 @@ if command -v cmake >/dev/null 2>&1; then
     fi
 
     echo "Compiling..."
-    make -j"$(nproc)"
+    if command -v nproc >/dev/null 2>&1; then
+        JOBS="$(nproc)"
+    elif command -v sysctl >/dev/null 2>&1; then
+        JOBS="$(sysctl -n hw.logicalcpu 2>/dev/null)"
+    else
+        JOBS=4
+    fi
+
+    make -j"${JOBS}"
     if [ $? -ne 0 ]; then
         echo "❌ Build failed!"
         exit 1
@@ -34,10 +42,10 @@ else
         src/data/TrackData.cpp \
         src/data/VehicleParams.cpp \
         src/data/SimulationState.cpp \
-        src/physics/AerodynamicsModel.cpp \
-        src/physics/TireModel.cpp \
         src/physics/PowertrainModel.cpp \
+        src/physics/VehicleModel.cpp \
         src/solver/GGVGenerator.cpp \
+        src/solver/RacingLine.cpp \
         src/solver/QuasiSteadyStateSolver.cpp \
         src/telemetry/TelemetryLogger.cpp \
         src/io/JSONParser.cpp \
@@ -54,4 +62,3 @@ echo ""
 echo "To run the simulator:"
 echo "  ./build/lap_sim examples/montreal.csv examples/f1_2025.json"
 echo ""
-

@@ -1,0 +1,72 @@
+{
+  "name": "F2_2024_Quali_mediumdf",
+  "notes": "2024-generation Dallara F2 car, published 795 kg with driver + 5 kg fuel, 620 hp at 8750 rpm, 570 Nm at 6000 rpm. One common tyre grip multiplier fitted only to Monza 2024 qualifying (92.160 s). No other F2 lap used to fit any parameter. Aero ClA/CdA are engineering estimates: Monza 3.4/0.98, medium 5.0/1.35, high 6.0/1.60; no manufacturer aero map is available. F1 session weather and DRS-zone sidecars are proxies for F2. Source: https://www.fiaformula2.com/en/information/the-car-and-engine-f2.14LCsEEMG9yyx5DkhcN1J8",
+  "mass": {
+    "mass": 800.0,
+    "cog_height": 0.3,
+    "wheelbase": 3.135,
+    "weight_distribution": 0.45,
+    "track_width_front": 1.56,
+    "track_width_rear": 1.5,
+    "vehicle_width": 1.9,
+    "lltd_front": 0.5
+  },
+  "aerodynamics": {
+    "ClA": 5.0,
+    "CdA": 1.35,
+    "frontal_area": 1.0,
+    "air_density": 1.2,
+    "aero_balance": 0.43,
+    "drs": {
+      "enabled": true,
+      "drag_reduction": 0.2,
+      "downforce_reduction": 0.1,
+      "max_zones": 2
+    }
+  },
+  "tire": {
+    "mu_x": 1.5693392,
+    "mu_y": 1.6616533,
+    "load_sensitivity": 0.85,
+    "tire_radius": 0.34,
+    "combined_exponent": 2.0,
+    "rolling_resistance": 0.012,
+    "wheel_inertia": 1.3
+  },
+  "powertrain": {
+    "engine_torque_curve": {
+      "3000": 380,
+      "4000": 480,
+      "5000": 555,
+      "6000": 570,
+      "7000": 562,
+      "8000": 535,
+      "8750": 504,
+      "9250": 470,
+      "9750": 425
+    },
+    "gear_ratios": [
+      11.0,
+      8.25,
+      6.45,
+      5.2,
+      4.33,
+      3.64
+    ],
+    "final_drive": 1.0,
+    "efficiency": 0.93,
+    "max_rpm": 9750,
+    "min_rpm": 3000,
+    "shift_time": 0.04,
+    "engine_inertia": 0.05,
+    "drive": "RWD"
+  },
+  "brake": {
+    "max_brake_force": 30000,
+    "brake_bias": 0.58,
+    "ideal_bias": false
+  },
+  "racing_line": {
+    "edge_margin": -0.4
+  }
+}

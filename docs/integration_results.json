@@ -1,0 +1,37 @@
+[
+  {
+    "car": "F1_2025_Quali_LowDF",
+    "track": "Monza",
+    "lap_s": 78.83898225,
+    "solve_ms": 1010.267911,
+    "wall_ms": 1075.1809910000247
+  },
+  {
+    "car": "F1_2024_Quali_MediumDF",
+    "track": "Suzuka",
+    "lap_s": 89.04387913,
+    "solve_ms": 2788.756563,
+    "wall_ms": 2835.3215099999716
+  },
+  {
+    "car": "F2_2024_Quali_highdf",
+    "track": "Budapest",
+    "lap_s": 87.24822691,
+    "solve_ms": 2197.863852,
+    "wall_ms": 2232.043578999992
+  },
+  {
+    "car": "Honda_Civic_Si_2025",
+    "track": "Silverstone",
+    "lap_s": 156.0869941,
+    "solve_ms": 2017.207869,
+    "wall_ms": 2055.623130000072
+  },
+  {
+    "car": "FSAE_RoadCourse",
+    "track": "Shanghai",
+    "lap_s": 132.6352578,
+    "solve_ms": 1775.252719,
+    "wall_ms": 1809.660612000016
+  }
+]

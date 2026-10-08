@@ -8,9 +8,11 @@ import shutil
 import pandas as pd
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 import asyncio
-from prediction_engine import run_prediction, is_engine_built
+from prediction_engine import (run_prediction, is_engine_built, engine_revision,
+                               safe_filename, _find_car_file, find_track_file)
+import numpy as np
 
 # yeah we just pretend auth exists for now lol
 PLACEHOLDER_AUTH = "ididntwriteauthsystemyetLOL"
@@ -18,7 +20,7 @@ PLACEHOLDER_AUTH = "ididntwriteauthsystemyetLOL"
 # setup data directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
-DATA_DIR = os.path.join(BASE_DIR, "data")
+DATA_DIR = os.getenv("VQUALIA_DATA_DIR", os.path.join(BASE_DIR, "data"))
 CARS_DIR = os.path.join(DATA_DIR, "cars")
 TRACKS_DIR = os.path.join(DATA_DIR, "tracks")
 PREDICTIONS_DIR = os.path.join(DATA_DIR, "predictions")
@@ -46,7 +48,7 @@ def seed_example_cars() -> None:
     """Seed API car storage from root cars dir and engine examples when files are missing."""
 
     existing_names = set()
-    for filename in os.listdir(CARS_DIR):
+    for filename in sorted(os.listdir(CARS_DIR)):
         if filename.endswith(".json"):
             existing_names.add(_load_car_name(os.path.join(CARS_DIR, filename)).lower())
 
@@ -73,6 +75,47 @@ def seed_example_cars() -> None:
 
 seed_example_cars()
 
+# Repair the old untouched Civic example while respecting customized vehicles.
+default_civic_path = os.path.join(ENGINE_EXAMPLES_DIR, 'honda_civic_si_2025.json')
+with open(default_civic_path) as civic_source:
+    default_civic = json.load(civic_source)
+old_civic = json.loads(json.dumps(default_civic))
+old_civic['powertrain'].pop('drive', None)
+for filename in os.listdir(CARS_DIR):
+    if filename.endswith('.json'):
+        path = os.path.join(CARS_DIR, filename)
+        with open(path) as source:
+            stored = json.load(source)
+        comparable = {k: v for k, v in stored.items() if k not in ('created_at', 'updated_at', 'id')}
+        if comparable == old_civic:
+            stored['powertrain']['drive'] = 'FWD'
+            with open(path, 'w') as destination:
+                json.dump(stored, destination, indent=2)
+
+# Track metadata belongs beside its CSV. Never replace an existing user's track.
+for filename in os.listdir(ENGINE_EXAMPLES_DIR):
+    parts = filename.split('.')
+    geometry_name = parts[0] + '.csv'
+    geometry_path = os.path.join(TRACKS_DIR, geometry_name)
+    geometry_matches = True
+    if len(parts) > 2 and os.path.exists(geometry_path):
+        with open(geometry_path) as stored, open(os.path.join(ENGINE_EXAMPLES_DIR, geometry_name)) as bundled:
+            geometry_matches = stored.read().strip() == bundled.read().strip()
+    if filename.endswith('.csv') and geometry_matches and not os.path.exists(os.path.join(TRACKS_DIR, filename)):
+        shutil.copy2(os.path.join(ENGINE_EXAMPLES_DIR, filename), os.path.join(TRACKS_DIR, filename))
+
+def read_track(filepath):
+    rows = pd.read_csv(filepath, comment='#', header=None)
+    if str(rows.iloc[0, 0]).strip().lower() == 'x_m' and str(rows.iloc[0, 1]).strip().lower() == 'y_m':
+        rows = rows.iloc[1:]
+    numeric = rows.apply(pd.to_numeric, errors='coerce')
+    if numeric.shape[1] != 4 or len(numeric) < 3 or not np.isfinite(numeric.to_numpy()).all():
+        raise ValueError('Track needs finite x, y, right-width, left-width columns')
+    numeric.columns = ['x_m', 'y_m', 'w_tr_right_m', 'w_tr_left_m']
+    xy = numeric[['x_m', 'y_m']].to_numpy()
+    length = float(np.linalg.norm(np.diff(xy, axis=0), axis=1).sum() + np.linalg.norm(xy[-1] - xy[0]))
+    return numeric, length
+
 app = FastAPI(
     title="V-Qualia API",
     description="Backend for V-Qualia telemetry platform",
@@ -90,25 +133,28 @@ app.add_middleware(
 
 # models for request/response
 # nested car config models for prediction engine format
-class MassConfig(BaseModel):
+class EngineConfig(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+class MassConfig(EngineConfig):
     mass: float
     cog_height: float
     wheelbase: float
     weight_distribution: float
 
-class AerodynamicsConfig(BaseModel):
-    Cl: float
-    Cd: float
+class AerodynamicsConfig(EngineConfig):
+    Cl: Optional[float] = None
+    Cd: Optional[float] = None
     frontal_area: float
     air_density: float
 
-class TireConfig(BaseModel):
+class TireConfig(EngineConfig):
     mu_x: float
     mu_y: float
     load_sensitivity: float
     tire_radius: float
 
-class PowertrainConfig(BaseModel):
+class PowertrainConfig(EngineConfig):
     engine_torque_curve: dict
     gear_ratios: List[float]
     final_drive: float
@@ -116,11 +162,11 @@ class PowertrainConfig(BaseModel):
     max_rpm: float
     min_rpm: float
 
-class BrakeConfig(BaseModel):
+class BrakeConfig(EngineConfig):
     max_brake_force: float
     brake_bias: float
 
-class CarConfig(BaseModel):
+class CarConfig(EngineConfig):
     name: str
     mass: MassConfig
     aerodynamics: AerodynamicsConfig
@@ -155,7 +201,8 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat(), "engine": engine_revision(),
+            "deployment_commit": os.getenv('RENDER_GIT_COMMIT')}
 
 # === CAR ENDPOINTS ===
 
@@ -180,10 +227,9 @@ async def get_car(car_name: str, auth: str = Header(None, alias="Authorization")
     verify_auth(auth)
     
     # replace spaces with underscores for filename
-    filename = f"{car_name.replace(' ', '_')}.json"
-    filepath = os.path.join(CARS_DIR, filename)
+    filepath = _find_car_file(car_name)
     
-    if not os.path.exists(filepath):
+    if not filepath or not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail=f"car '{car_name}' not found")
     
     with open(filepath, "r") as f:
@@ -196,14 +242,14 @@ async def create_car(car: CarConfig, auth: str = Header(None, alias="Authorizati
     verify_auth(auth)
     
     # save as json file (use 'name' field now)
-    filename = f"{car.name.replace(' ', '_')}.json"
+    filename = f"{safe_filename(car.name).replace(' ', '_')}.json"
     filepath = os.path.join(CARS_DIR, filename)
     
     # check if car already exists
-    if os.path.exists(filepath):
+    if _find_car_file(car.name):
         raise HTTPException(status_code=400, detail=f"car '{car.name}' already exists")
     
-    car_data = car.dict()
+    car_data = car.model_dump(exclude_none=True)
     car_data["created_at"] = datetime.now().isoformat()
     car_data["updated_at"] = datetime.now().isoformat()
     
@@ -216,17 +262,16 @@ async def create_car(car: CarConfig, auth: str = Header(None, alias="Authorizati
 async def update_car(car_name: str, car: CarConfig, auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    filename = f"{car_name.replace(' ', '_')}.json"
-    filepath = os.path.join(CARS_DIR, filename)
+    filepath = _find_car_file(car_name)
     
-    if not os.path.exists(filepath):
+    if not filepath or not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail=f"car '{car_name}' not found")
     
     # load existing data to keep created_at
     with open(filepath, "r") as f:
         existing_data = json.load(f)
     
-    car_data = car.dict()
+    car_data = car.model_dump(exclude_none=True)
     car_data["created_at"] = existing_data.get("created_at", datetime.now().isoformat())
     car_data["updated_at"] = datetime.now().isoformat()
     
@@ -239,10 +284,9 @@ async def update_car(car_name: str, car: CarConfig, auth: str = Header(None, ali
 async def delete_car(car_name: str, auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    filename = f"{car_name.replace(' ', '_')}.json"
-    filepath = os.path.join(CARS_DIR, filename)
+    filepath = _find_car_file(car_name)
     
-    if not os.path.exists(filepath):
+    if not filepath or not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail=f"car '{car_name}' not found")
     
     # actually delete the file, no mercy
@@ -263,18 +307,19 @@ async def get_tracks(auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
     tracks = []
-    for filename in os.listdir(TRACKS_DIR):
-        if filename.endswith(".csv"):
+    for filename in sorted(os.listdir(TRACKS_DIR)):
+        if filename.endswith(".csv") and not filename.endswith(('.drs.csv', '.elevation.csv', '.banking.csv')):
             filepath = os.path.join(TRACKS_DIR, filename)
             track_name = filename.replace(".csv", "").replace("_", " ")
             
             # read csv to get some basic info
             try:
-                df = pd.read_csv(filepath)
+                df, length = read_track(filepath)
                 track_info = {
                     "name": track_name,  # unified format: use 'name' not 'track_name'
+                    "track_name": track_name,
                     "filename": filename,
-                    "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
+                    "length": length,
                     "data_points": len(df),
                     "created_at": datetime.fromtimestamp(os.path.getctime(filepath)).isoformat()
                 }
@@ -289,21 +334,20 @@ async def get_tracks(auth: str = Header(None, alias="Authorization")):
 async def get_track(track_name: str, auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    filename = f"{track_name.replace(' ', '_')}.csv"
-    filepath = os.path.join(TRACKS_DIR, filename)
+    filepath = find_track_file(track_name)
     
-    if not os.path.exists(filepath):
+    if not filepath or not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail=f"track '{track_name}' not found")
     
     # read and return csv data
-    df = pd.read_csv(filepath)
+    df, length = read_track(filepath)
     
     return {
         "success": True,
         "name": track_name,  # unified format: use 'name' not 'track_name'
         "data": df.to_dict(orient='records'),
         "columns": list(df.columns),
-        "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
+        "length": length,
         "data_points": len(df)
     }
 
@@ -319,7 +363,7 @@ async def upload_track(
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="only csv files allowed")
     
-    filename = f"{track_name.replace(' ', '_')}.csv"
+    filename = f"{safe_filename(track_name).replace(' ', '_')}.csv"
     filepath = os.path.join(TRACKS_DIR, filename)
     
     # check if track already exists
@@ -333,11 +377,11 @@ async def upload_track(
     
     # validate it's actually a proper csv
     try:
-        df = pd.read_csv(filepath)
+        df, length = read_track(filepath)
         track_info = {
             "track_name": track_name,
             "filename": filename,
-            "length": float(df['s_m'].max()) if 's_m' in df.columns else None,
+            "length": length,
             "data_points": len(df),
             "columns": list(df.columns)
         }
@@ -352,10 +396,9 @@ async def upload_track(
 async def delete_track(track_name: str, auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    filename = f"{track_name.replace(' ', '_')}.csv"
-    filepath = os.path.join(TRACKS_DIR, filename)
+    filepath = find_track_file(track_name)
     
-    if not os.path.exists(filepath):
+    if not filepath or not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail=f"track '{track_name}' not found")
     
     # nuke it from existence
@@ -377,7 +420,7 @@ async def get_predictions(auth: str = Header(None, alias="Authorization")):
     
     predictions = []
     for filename in os.listdir(PREDICTIONS_DIR):
-        if filename.endswith(".csv"):
+        if filename.endswith(".csv") and not filename.endswith(('.GGV.csv', '.line.csv', '-GGV.csv')):
             filepath = os.path.join(PREDICTIONS_DIR, filename)
             predictions.append({
                 "filename": filename,
@@ -391,18 +434,18 @@ async def get_predictions(auth: str = Header(None, alias="Authorization")):
 async def get_prediction(filename: str, auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    filepath = os.path.join(PREDICTIONS_DIR, filename)
+    filepath = os.path.join(PREDICTIONS_DIR, safe_filename(filename))
     
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="prediction not found")
     
-    return FileResponse(filepath, media_type="text/csv", filename=filename)
+    return FileResponse(filepath, media_type="application/json" if filename.endswith('.json') else "text/csv", filename=filename)
 
 @app.delete("/api/predictions/{filename}")
 async def delete_prediction(filename: str, auth: str = Header(None, alias="Authorization")):
     verify_auth(auth)
     
-    filepath = os.path.join(PREDICTIONS_DIR, filename)
+    filepath = os.path.join(PREDICTIONS_DIR, safe_filename(filename))
     
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="prediction not found")
@@ -473,6 +516,13 @@ async def cleanup_all_data(auth: str = Header(None, alias="Authorization")):
 class PredictionRequest(BaseModel):
     car_name: str
     track_name: str
+    resolution_m: float = Field(default=2, ge=.5, le=5)
+    air_density: float = Field(default=1.225, ge=.5, le=2)
+    grip_scale: float = Field(default=1, ge=.3, le=2)
+    ers: bool = True
+    drs: bool = True
+    export_ggv: bool = False
+    line_mode: str = Field(default='mincurv', pattern='^(mincurv|center)$')
 
 class PredictionResponse(BaseModel):
     success: bool
@@ -497,22 +547,18 @@ async def predict_lap(request: PredictionRequest, auth: str = Header(None, alias
                 detail="prediction engine not built. run ./build.sh (Linux/macOS) or build.bat (Windows) in backend/engine/ first"
             )
         
-        # run prediction (this takes ~8+ seconds minimum)
-        lap_time, telemetry_file, ggv_file = run_prediction(
-            car_name=request.car_name,
-            track_name=request.track_name
+        result = await asyncio.to_thread(
+            run_prediction, request.car_name, request.track_name,
+            request.model_dump(exclude={'car_name', 'track_name'})
         )
-
-        return {
-            "success": True,
-            "lap_time": lap_time,
-            "telemetry_file": telemetry_file,
-            "ggv_file": ggv_file,
-            "message": f"prediction complete! lap time: {lap_time:.3f}s"
-        }
+        return result
         
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"prediction failed: {str(e)}")
 
@@ -527,6 +573,7 @@ async def prediction_status(auth: str = Header(None, alias="Authorization")):
     return {
         "engine_built": engine_ready,
         "ready": engine_ready,
+        "engine": engine_revision(),
         "message": "engine ready" if engine_ready else "engine not built - run ./build.sh or build.bat"
     }
 
@@ -537,5 +584,5 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=10000,
-        reload=True
+        reload=False
     )

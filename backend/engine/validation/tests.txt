@@ -1,0 +1,20 @@
+Internal ctest changing into directory: /mnt/c/Users/Pouya/Desktop/KIRO anon/Engine/LapPredictionEngine/build
+Test project /mnt/c/Users/Pouya/Desktop/KIRO anon/Engine/LapPredictionEngine/build
+    Start 1: solver_reuse_checks
+1/7 Test #1: solver_reuse_checks ..............   Passed    3.15 sec
+    Start 2: model_checks
+2/7 Test #2: model_checks .....................   Passed    0.03 sec
+    Start 3: regression_checks
+3/7 Test #3: regression_checks ................   Passed    0.27 sec
+    Start 4: physics_checks
+4/7 Test #4: physics_checks ...................   Passed   30.59 sec
+    Start 5: real_laps_calibration
+5/7 Test #5: real_laps_calibration ............   Passed   15.11 sec
+    Start 6: real_laps_out_of_sample
+6/7 Test #6: real_laps_out_of_sample ..........   Passed   27.65 sec
+    Start 7: real_laps_f2
+7/7 Test #7: real_laps_f2 .....................   Passed    8.09 sec
+
+100% tests passed, 0 tests failed out of 7
+
+Total Test time (real) =  85.00 sec

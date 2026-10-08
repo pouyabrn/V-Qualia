@@ -1,553 +1,69 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Car, Target, Download, CheckCircle, TrendingUp, Play, RefreshCw, AlertCircle } from 'lucide-react';
-import { ResponsiveContainer, ScatterChart, XAxis, YAxis, Scatter } from 'recharts';
-import AnimatedCounter from '../common/AnimatedCounter';
+import { useEffect, useState } from 'react';
+import { Play, Download, ExternalLink, RefreshCw } from 'lucide-react';
 import { carsAPI, tracksAPI, predictionsAPI } from '../../utils/api';
+import { parseCSV } from '../../utils/csvParser';
+import { TrackPlot } from '../charts/ScientificCharts';
+import { formatLap, formatValue } from '../../utils/chartFormatting';
+import TelemetryWorkbench from '../charts/TelemetryWorkbench';
+import LapReplayViewer from './LapReplayViewer';
 
-const PredictPage = () => {
-  // data loading
-  const [cars, setCars] = useState([]);
-  const [tracks, setTracks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  
-  // prediction state
-  const [predictionStep, setPredictionStep] = useState(0); // 0: setup, 1: loading, 2: results
-  const [selectedPredictCar, setSelectedPredictCar] = useState(null);
-  const [selectedPredictTrack, setSelectedPredictTrack] = useState(null);
-  const [predictedLapTime, setPredictedLapTime] = useState(null);
-  const [predictionProgress, setPredictionProgress] = useState(0);
-  const [predictionOutputFile, setPredictionOutputFile] = useState(null);
-  const [predictionGGVFile, setPredictionGGVFile] = useState(null);
-  const [engineStatus, setEngineStatus] = useState(null);
-  
-  // selected track data for visualization
-  const [trackData, setTrackData] = useState([]);
-
-  // load cars and tracks on mount
-  useEffect(() => {
-    loadData();
-    checkEngineStatus();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [carsResponse, tracksResponse] = await Promise.all([
-        carsAPI.getAll(),
-        tracksAPI.getAll()
-      ]);
-      
-      setCars(carsResponse.cars || []);
-      setTracks(tracksResponse.tracks || []);
-      
-      // auto-select first car and track
-      if (carsResponse.cars && carsResponse.cars.length > 0) {
-        setSelectedPredictCar(carsResponse.cars[0]);
-      }
-      if (tracksResponse.tracks && tracksResponse.tracks.length > 0) {
-        const firstTrack = tracksResponse.tracks[0];
-        setSelectedPredictTrack(firstTrack);
-        // only load visualization if track name exists
-        if (firstTrack.name) {
-          loadTrackVisualization(firstTrack.name);
-        }
-      }
-    } catch (error) {
-      console.error('failed to load data:', error);
-      alert('couldnt load cars/tracks: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
+export default function PredictPage({ savedRun, onRun }) {
+  const [cars, setCars] = useState([]), [tracks, setTracks] = useState([]), [status, setStatus] = useState(null);
+  const [car, setCar] = useState(savedRun?.car || ''), [track, setTrack] = useState(savedRun?.track || ''), [geometry, setGeometry] = useState([]);
+  const [options, setOptions] = useState(savedRun?.options || { resolution_m: 2, air_density: 1.225, grip_scale: 1, line_mode: 'mincurv', ers: true, drs: true, export_ggv: false });
+  const [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState('');
+  const [result, setResult] = useState(savedRun?.result || null), [data, setData] = useState(savedRun?.data || null), [view, setView] = useState('channels');
+  const load = async () => {
+    setLoading(true); setError('');
+    try { const [c, t, s] = await Promise.all([carsAPI.getAll(), tracksAPI.getAll(), predictionsAPI.status()]);
+      setCars(c.cars); setTracks(t.tracks); setStatus(s);
+      setCar(prev => prev || c.cars.find(r => r.name === 'F1_2025_Quali_LowDF')?.name || c.cars[0]?.name || '');
+      setTrack(prev => prev || t.tracks.find(r => r.name === 'Monza')?.name || t.tracks[0]?.name || '');
+    } catch (e) { setError(e.message); } finally { setLoading(false); }
   };
-
-  const checkEngineStatus = async () => {
-    try {
-      const status = await predictionsAPI.status();
-      setEngineStatus(status);
-    } catch (error) {
-      console.error('failed to check engine status:', error);
-    }
+  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!track) return; let active = true;
+    tracksAPI.get(track).then(r => { if (active) setGeometry(r.data.map(p => ({ x: p.x_m, y: p.y_m }))); }).catch(e => { if (active) setError(e.message); });
+    return () => { active = false; }; }, [track]);
+  const change = (key, value) => setOptions(previous => ({ ...previous, [key]: value }));
+  const predict = async event => {
+    event.preventDefault(); setBusy(true); setError(''); setResult(null); setData(null); onRun(null);
+    try { const r = await predictionsAPI.predict(car, track, options); setResult(r);
+      const csv = await predictionsAPI.download(r.telemetry_file), parsed = parseCSV(csv); setData(parsed); setView('channels');
+      onRun({ result: r, data: parsed, car, track, options });
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
-
-  const loadTrackVisualization = async (trackName) => {
-    if (!trackName) {
-      console.log('no track name provided for visualization');
-      return;
-    }
-    
-    try {
-      const response = await tracksAPI.get(trackName);
-      if (response.data && response.data.length > 0) {
-        // find x, y columns (case-insensitive)
-        const keys = Object.keys(response.data[0]);
-        const xKey = keys.find(k => k.toLowerCase().includes('x'));
-        const yKey = keys.find(k => k.toLowerCase().includes('y'));
-        
-        if (xKey && yKey) {
-          const viz = response.data.map(row => ({
-            x: parseFloat(row[xKey]),
-            y: parseFloat(row[yKey])
-          })).filter(p => !isNaN(p.x) && !isNaN(p.y));
-          
-          // downsample for better performance and spacing (keep every 10th point)
-          const downsampled = viz.filter((_, i) => i % 10 === 0);
-          setTrackData(downsampled);
-        }
-      }
-    } catch (error) {
-      console.error('failed to load track visualization:', error);
-      // don't alert, just log - visualization is not critical
-    }
+  const download = async filename => {
+    try { const blob = await predictionsAPI.get(filename), url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
+    catch (e) { setError(e.message); }
   };
-
-  const handleStartPrediction = async () => {
-    if (!selectedPredictCar || !selectedPredictTrack) {
-      alert('Please select both a car and a track');
-      return;
-    }
-
-    // check engine status first
-    if (!engineStatus || !engineStatus.ready) {
-      alert('Prediction engine not ready! Please build the engine first (run ./build.sh on Linux/macOS or build.bat on Windows in backend/engine/)');
-      return;
-    }
-
-    setPredictionStep(1);
-    setPredictionProgress(0);
-
-    // simulate smooth progress while waiting for backend
-    const progressInterval = setInterval(() => {
-      setPredictionProgress(prev => {
-        if (prev >= 95) {
-          return prev; // hold at 95% until backend responds
-        }
-        return prev + 1;
-      });
-    }, 80); // ~8 seconds to reach 95%
-
-    try {
-      // get car and track names (unified format)
-      const carName = selectedPredictCar.name;
-      const trackName = selectedPredictTrack.name;
-      
-      console.log('starting prediction:', carName, trackName);
-      
-      // validate names
-      if (!carName || !trackName) {
-        throw new Error(`Missing car or track name. Car: ${carName}, Track: ${trackName}`);
-      }
-      
-      // call backend prediction
-      const result = await predictionsAPI.predict(carName, trackName);
-      
-      console.log('prediction result:', result);
-      
-      // stop progress animation
-      clearInterval(progressInterval);
-      
-      // complete progress
-      setPredictionProgress(100);
-      setPredictedLapTime(result.lap_time);
-      setPredictionOutputFile(result.telemetry_file);
-      setPredictionGGVFile(result.ggv_file);
-      
-      // move to results step
-      setTimeout(() => {
-        setPredictionStep(2);
-      }, 500);
-      
-    } catch (error) {
-      clearInterval(progressInterval);
-      console.error('prediction failed:', error);
-      alert('Prediction failed: ' + error.message);
-      setPredictionStep(0);
-      setPredictionProgress(0);
-    }
-  };
-
-  const handleDownloadCSV = async () => {
-    if (!predictionOutputFile) {
-      alert('No telemetry file available');
-      return;
-    }
-
-    try {
-      // download the CSV file
-      const csvText = await predictionsAPI.download(predictionOutputFile);
-
-      // create download link
-      const blob = new Blob([csvText], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = predictionOutputFile;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-    } catch (error) {
-      console.error('download failed:', error);
-      alert('Failed to download telemetry CSV: ' + error.message);
-    }
-  };
-
-  const handleDownloadGGV = async () => {
-    if (!predictionGGVFile) {
-      alert('No GGV file available');
-      return;
-    }
-
-    try {
-      // download the GGV CSV file
-      const csvText = await predictionsAPI.download(predictionGGVFile);
-
-      // create download link
-      const blob = new Blob([csvText], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = predictionGGVFile;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-    } catch (error) {
-      console.error('GGV download failed:', error);
-      alert('Failed to download GGV CSV: ' + error.message);
-    }
-  };
-
-  const handleResetPrediction = () => {
-    setPredictionStep(0);
-    setPredictionProgress(0);
-    setPredictedLapTime(null);
-    setPredictionOutputFile(null);
-    setPredictionGGVFile(null);
-  };
-
-  const handleViewLapReplay = () => {
-    // pass the prediction output file to lap replay viewer
-    const replayUrl = `${window.location.origin}/#/lap-replay-viewer?file=${encodeURIComponent(predictionOutputFile)}`;
-    window.open(replayUrl, '_blank', 'width=1600,height=900');
-  };
-
-  // loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <RefreshCw className="w-12 h-12 text-cyan-400 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">loading cars and tracks...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // engine not ready warning
-  const engineWarning = engineStatus && !engineStatus.ready && (
-    <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-start gap-3">
-      <AlertCircle className="text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
-      <div>
-        <p className="text-yellow-300 font-semibold">Prediction Engine Not Built</p>
-        <p className="text-yellow-400/80 text-sm">
-          Run <code className="px-1 bg-black/30 rounded">./build.sh</code> (Linux/macOS) or <code className="px-1 bg-black/30 rounded">build.bat</code> (Windows) in <code className="px-1 bg-black/30 rounded">backend/engine/</code> to build the prediction engine.
-        </p>
-      </div>
-    </div>
-  );
-
-  // Step 0: Setup
-  if (predictionStep === 0) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-4xl font-bold mb-6 text-center text-cyan-300">
-          Predict Optimal Lap Time
-        </h2>
-        <p className="text-gray-400 text-center mb-8">
-          Select a vehicle and track to simulate the fastest possible lap time
-        </p>
-
-        {engineWarning}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="card-gradient">
-            <h3 className="text-xl font-semibold mb-4 text-cyan-300 flex items-center gap-2">
-              <Car size={20} /> Select Vehicle
-            </h3>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {cars.length === 0 ? (
-                <p className="text-gray-500 text-sm">No cars available. Create one in the Cars page.</p>
-              ) : (
-                cars.map(car => {
-                  const carName = car.name;
-                  return (
-                    <button
-                      key={carName}
-                      onClick={() => setSelectedPredictCar(car)}
-                      className={`w-full text-left p-3 rounded-lg transition-all ${
-                        selectedPredictCar?.name === car.name
-                          ? 'bg-cyan-500/20 border border-cyan-400'
-                          : 'bg-white/5 hover:bg-white/10 border border-white/10'
-                      }`}
-                    >
-                      <div className="font-medium">{carName}</div>
-                      <div className="text-sm text-gray-400">
-                        {car.mass?.mass || 'N/A'} kg
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <div className="card-gradient">
-            <h3 className="text-xl font-semibold mb-4 text-cyan-300 flex items-center gap-2">
-              <Target size={20} /> Select Track
-            </h3>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {tracks.length === 0 ? (
-                <p className="text-gray-500 text-sm">No tracks available. Upload one in the Tracks page.</p>
-              ) : (
-                tracks.map((track, index) => {
-                  const trackName = track.name || track.filename?.replace('.csv', '') || `track_${index}`;
-                  return (
-                    <button
-                      key={track.name || track.filename || index}
-                      onClick={() => {
-                        setSelectedPredictTrack(track);
-                        if (track.name) {
-                          loadTrackVisualization(track.name);
-                        }
-                      }}
-                      className={`w-full text-left p-3 rounded-lg transition-all ${
-                        selectedPredictTrack?.name === track.name
-                          ? 'bg-cyan-500/20 border border-cyan-400'
-                          : 'bg-white/5 hover:bg-white/10 border border-white/10'
-                      }`}
-                    >
-                      <div className="font-medium">{trackName}</div>
-                      <div className="text-sm text-gray-400">
-                        {track.length ? `${(track.length / 1000).toFixed(2)} km` : `${track.data_points || 'N/A'} points`}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Track Preview */}
-        {trackData.length > 0 && (
-          <div className="card-gradient mb-8">
-            <h3 className="text-sm font-semibold mb-3 text-cyan-300 uppercase tracking-wider">Track Preview</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <ScatterChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                <defs>
-                  <linearGradient id="trackGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#ec4899" />
-                    <stop offset="50%" stopColor="#8b5cf6" />
-                    <stop offset="100%" stopColor="#3b82f6" />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="x" type="number" hide />
-                <YAxis dataKey="y" type="number" hide />
-                <Scatter 
-                  data={trackData} 
-                  fill="none"
-                  stroke="none"
-                  line={{ stroke: 'url(#trackGradient)', strokeWidth: 4 }}
-                  shape={() => null}
-                  isAnimationActive={false}
-                />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        <button
-          onClick={handleStartPrediction}
-          disabled={!selectedPredictCar || !selectedPredictTrack || (engineStatus && !engineStatus.ready)}
-          className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg font-semibold text-lg hover:from-cyan-600 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Start Prediction
-        </button>
-      </div>
-    );
-  }
-
-  // Step 1: Loading
-  if (predictionStep === 1) {
-    // calculate how much of the track to show in yellow based on progress
-    const progressIndex = Math.floor((trackData.length * predictionProgress) / 100);
-    const progressTrackData = trackData.slice(0, Math.max(1, progressIndex));
-
-    return (
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-4xl font-bold mb-6 text-center text-cyan-300">
-          Simulating Lap...
-        </h2>
-        
-        {/* Track with animated path */}
-        {trackData.length > 0 && (
-          <div className="card-gradient mb-8">
-            <ResponsiveContainer width="100%" height={400}>
-              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <defs>
-                  <linearGradient id="trackLoadingGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#ec4899" />
-                    <stop offset="50%" stopColor="#8b5cf6" />
-                    <stop offset="100%" stopColor="#3b82f6" />
-                  </linearGradient>
-                  <filter id="yellowGlow">
-                    <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                    <feMerge>
-                      <feMergeNode in="coloredBlur"/>
-                      <feMergeNode in="SourceGraphic"/>
-                    </feMerge>
-                  </filter>
-                </defs>
-                <XAxis dataKey="x" type="number" hide />
-                <YAxis dataKey="y" type="number" hide />
-                {/* Base track - full track in dim color */}
-                <Scatter
-                  data={trackData}
-                  fill="none"
-                  stroke="none"
-                  line={{
-                    stroke: 'url(#trackLoadingGradient)',
-                    strokeWidth: 4,
-                    strokeOpacity: 0.3
-                  }}
-                  shape={() => null}
-                  isAnimationActive={false}
-                />
-                {/* Progress track - yellow line following progress */}
-                <Scatter
-                  data={progressTrackData}
-                  fill="none"
-                  stroke="none"
-                  line={{
-                    stroke: '#eab308',
-                    strokeWidth: 5,
-                    filter: 'url(#yellowGlow)'
-                  }}
-                  shape={() => null}
-                  isAnimationActive={false}
-                />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Progress Bar */}
-        <div className="card-gradient">
-          <div className="mb-4">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-400">Progress</span>
-              <span className="text-cyan-400 font-semibold">{predictionProgress.toFixed(0)}%</span>
-            </div>
-            <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-100"
-                style={{ width: `${predictionProgress}%` }}
-              />
-            </div>
-          </div>
-          <p className="text-gray-400 text-center text-sm">
-            Running physics simulation...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 2: Results
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-8">
-        <CheckCircle size={64} className="text-green-400 mx-auto mb-4" />
-        <h2 className="text-4xl font-bold mb-2 text-cyan-300">
-          Prediction Complete!
-        </h2>
-        <p className="text-gray-400">
-          Optimal lap time for {selectedPredictCar?.name || selectedPredictCar?.vehicle_name} at {selectedPredictTrack?.name}
-        </p>
-      </div>
-
-      <div className="card-gradient mb-8">
-        <div className="text-center py-8">
-          <div className="text-gray-400 text-sm uppercase tracking-wider mb-3">Optimal Lap Time</div>
-          <div className="text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-cyan-300 to-cyan-500" 
-               style={{ 
-                 textShadow: '0 0 40px rgba(34, 211, 238, 0.5), 0 0 80px rgba(34, 211, 238, 0.3)',
-                 fontFamily: 'system-ui, -apple-system, sans-serif',
-                 letterSpacing: '-0.02em'
-               }}>
-            <AnimatedCounter value={predictedLapTime} decimals={3} suffix="s" />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <button
-          onClick={handleDownloadCSV}
-          className="flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-600 transition-all"
-        >
-          <Download size={20} />
-          Download Telemetry CSV
-        </button>
-
-        {predictionGGVFile && (
-          <button
-            onClick={() => handleDownloadGGV()}
-            className="flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg font-semibold hover:from-blue-600 hover:to-indigo-600 transition-all"
-          >
-            <Download size={20} />
-            Download GGV CSV
-          </button>
-        )}
-
-        <button
-          onClick={handleViewLapReplay}
-          className="flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all"
-        >
-          <Play size={20} />
-          View Lap Replay
-        </button>
-
-        <button
-          onClick={handleResetPrediction}
-          className="flex items-center justify-center gap-2 py-4 bg-white/10 rounded-lg font-semibold hover:bg-white/20 transition-all"
-        >
-          <TrendingUp size={20} />
-          New Prediction
-        </button>
-      </div>
-
-      {/* Track visualization */}
-      {trackData.length > 0 && (
-        <div className="card-gradient">
-          <h3 className="text-lg font-semibold mb-4 text-cyan-300">Predicted Path</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-              <XAxis dataKey="x" type="number" hide />
-              <YAxis dataKey="y" type="number" hide />
-              <Scatter
-                data={trackData}
-                fill="#06b6d4"
-                line={{ stroke: '#06b6d4', strokeWidth: 2 }}
-              />
-            </ScatterChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default PredictPage;
-
+  return <div><div className="page-heading"><div><div className="eyebrow">QUASI-STEADY-STATE SIMULATION</div><h1>Lap prediction</h1><p>Set the vehicle and conditions. Inspect the resulting lap.</p></div>
+    <div className="engine-state"><span className={`status-dot ${status?.ready ? 'ready' : ''}`} />{loading ? 'Connecting…' : status?.ready ? 'Engine ready' : 'Engine unavailable'}<button className="icon-button" aria-label="Refresh engine status" onClick={load}><RefreshCw size={14} /></button></div></div>
+    <div className="prediction-layout"><form className="setup-panel" onSubmit={predict}>
+      <h2>Simulation setup</h2><fieldset disabled={busy || loading}>
+        <label>Vehicle<select value={car} onChange={e => setCar(e.target.value)} required><option value="" disabled>Select a vehicle</option>{cars.map(c => <option key={c.name}>{c.name}</option>)}</select></label>
+        <label>Circuit<select value={track} onChange={e => setTrack(e.target.value)} required><option value="" disabled>Select a circuit</option>{tracks.map(t => <option key={t.name}>{t.name}</option>)}</select></label>
+        <div className="setup-divider">CONDITIONS</div>
+        <label>Air density <span>kg/m³</span><input type="number" min="0.5" max="2" step="0.001" value={options.air_density} onChange={e => change('air_density', Number(e.target.value))} required /></label>
+        <label>Grip scale <span>× preset</span><input type="number" min="0.3" max="2" step="0.01" value={options.grip_scale} onChange={e => change('grip_scale', Number(e.target.value))} required /></label>
+        <label>Path resolution<select value={options.resolution_m} onChange={e => change('resolution_m', Number(e.target.value))}><option value="2">2 m · fast</option><option value="1">1 m · fine</option><option value="0.5">0.5 m · detailed</option><option value="5">5 m · coarse</option></select></label>
+        <label>Racing line<select value={options.line_mode} onChange={e => change('line_mode', e.target.value)}><option value="mincurv">Minimum curvature</option><option value="center">Centreline</option></select></label>
+        <label className="checkbox-label"><input type="checkbox" checked={options.ers} onChange={e => change('ers', e.target.checked)} />Enable ERS (if equipped)</label>
+        <label className="checkbox-label"><input type="checkbox" checked={options.drs} onChange={e => change('drs', e.target.checked)} />Use track DRS zones</label>
+        <label className="checkbox-label"><input type="checkbox" checked={options.export_ggv} onChange={e => change('export_ggv', e.target.checked)} />Export GGV envelope</label>
+        <button className="button primary run-button" type="submit" disabled={!status?.ready || !car || !track}><Play size={15} />{busy ? 'Solving…' : 'Predict lap'}</button>
+      </fieldset><p className="method-note">Track banking and elevation are applied when sidecars are available. GGV export adds work; it is an instantaneous envelope.</p>
+      {status?.engine?.commit && <a className="revision" href={`${status.engine.repository}/commit/${status.engine.commit}`} target="_blank" rel="noreferrer">Engine {status.engine.commit.slice(0, 7)}</a>}
+    </form><div className="prediction-results">
+      {error && <div className="error-message" role="alert">{error}</div>}
+      {busy && <div className="solve-preview"><TrackPlot data={geometry} title={track} animated /><div className="status-message" role="status">Solving the lap and writing telemetry. First use prepares the racing line.</div></div>}
+      {!result && !busy && <><div className="preview-grid"><TrackPlot data={geometry} title={track || 'Circuit'} /><section className="model-notes"><div className="eyebrow">MODEL</div><h2>Physics with a small CPU budget</h2><p>Load-sensitive tires, combined grip, aerodynamic forces and a forward/backward speed solve.</p><div className="equation">T = ∫₀ᴸ ds / v(s)</div><div className="equation">Fdrag = ½ρCdAv² · ay ≈ v²κ</div><p>Prediction uses an effective vehicle model. A minimum-curvature line does not guarantee the fastest line. Check corner speeds as well as total lap time.</p><a href="https://github.com/pouyabrn/LapPredictionEngine/blob/main/validation/REVIEW_REPORT.md" target="_blank" rel="noreferrer">See measured validation →</a></section></div><div className="empty-panel">Run a prediction to inspect speed, controls, axle loads and hybrid deployment here.</div></>}
+      {result && <><div className="result-heading"><div><span className="eyebrow">PREDICTED LAP</span><strong>{formatLap(result.lap_time)}</strong><span>{result.summary.vehicle} · {result.summary.track}</span></div><div className="run-details"><span>Converged · {formatValue(result.summary.solve_ms, 0)} ms solve</span><span>{formatValue(result.wall_ms, 0)} ms including export</span><span>{result.summary.ers_budget_mj != null ? `Net ERS ${formatValue(result.summary.ers_energy_mj, 3)} / ${formatValue(result.summary.ers_budget_mj, 3)} MJ` : 'No finite ERS budget applied'}</span></div></div>
+        <div className="result-toolbar"><div className="segmented"><button aria-pressed={view === 'channels'} onClick={() => setView('channels')}>Telemetry</button><button aria-pressed={view === 'replay'} onClick={() => setView('replay')}>Lap replay</button></div>
+          <a className="button secondary" href={`${window.location.pathname}#/lap-replay-viewer?file=${encodeURIComponent(result.telemetry_file)}`} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} />Pop out replay</a>
+          <details className="download-menu"><summary><Download size={14} />Export</summary><div>{[['Telemetry CSV', result.telemetry_file], ['Summary JSON', result.summary_file], ['Racing line CSV', result.line_file], ['GGV CSV', result.ggv_file], ['GGV conditions', result.ggv_metadata_file]].filter(([, f]) => f).map(([label, f]) => <button key={f} onClick={() => download(f)}>{label}</button>)}{result.ggv_file && <a href={`#/ggv?file=${encodeURIComponent(result.ggv_file)}`}>Inspect GGV envelope →</a>}</div></details>
+        </div>{data ? view === 'channels' ? <TelemetryWorkbench data={data} source="Simulated telemetry" /> : <LapReplayViewer data={data} embedded /> : <p className="status-message">Telemetry is unavailable; exports and summary remain available.</p>}
+      </>}
+    </div></div>
+  </div>;
+}

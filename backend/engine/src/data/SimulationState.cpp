@@ -46,6 +46,12 @@ void SimulationState::reset() {
     curvature = 0.0;
     radius = 1e9;  // Effectively infinite
     banking_angle = 0.0;
+
+    ers_power = 0.0;
+    drs_open = false;
+    grip_usage = 0.0;
+    fz_front = 0.0;
+    fz_rear = 0.0;
     
     timestamp = 0.0;
 }

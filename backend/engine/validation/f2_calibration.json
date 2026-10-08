@@ -1,0 +1,22 @@
+{
+  "calibration_case": "f2_monza_2024",
+  "reference_lap_s": 92.16,
+  "grip_scale": 0.9231407165527344,
+  "mu_x": 1.5693392181396486,
+  "mu_y": 1.661653289794922,
+  "holdout_cases_used_for_fit": [],
+  "aero_packages": {
+    "monza": [
+      3.4,
+      0.98
+    ],
+    "mediumdf": [
+      5.0,
+      1.35
+    ],
+    "highdf": [
+      6.0,
+      1.6
+    ]
+  }
+}

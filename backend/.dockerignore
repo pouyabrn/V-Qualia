@@ -1,48 +1,7 @@
-# Python
 __pycache__
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-
-# Virtual environments
-venv/
-env/
-ENV/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
+.venv
+engine/build
+engine/outputs
+data/predictions/*
+data/line_cache/*
 *.log
-
-# Git
-.git
-.gitignore
-
-# Docker
-Dockerfile*
-.dockerignore
-
-# Documentation
-README.md
-
-# Testing (keep for now as test_api.py exists)
-# test_*
-
-# Engine build artifacts (will be rebuilt in container)
-engine/build/
-engine/*.exe
-engine/*.o
-
-# Cache directories (except f1_cache which we want to persist)
-__pycache__/

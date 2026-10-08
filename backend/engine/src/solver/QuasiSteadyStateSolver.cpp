@@ -1,525 +1,672 @@
 #include "solver/QuasiSteadyStateSolver.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
-#include <limits>
+#include <random>
+#include <sstream>
 #include <stdexcept>
-#include <vector>
 
 namespace LapTimeSim {
 
-namespace {
-
-size_t wrapIndex(long long index, size_t size) {
-    const long long mod = static_cast<long long>(size);
-    long long wrapped = index % mod;
-    if (wrapped < 0) {
-        wrapped += mod;
-    }
-    return static_cast<size_t>(wrapped);
-}
-
-std::vector<double> smoothCircular(const std::vector<double>& values, size_t radius) {
-    if (values.empty() || radius == 0) {
-        return values;
-    }
-
-    std::vector<double> smoothed(values.size(), 0.0);
-    for (size_t i = 0; i < values.size(); ++i) {
-        double weighted_sum = 0.0;
-        double weight_total = 0.0;
-        for (long long offset = -static_cast<long long>(radius); offset <= static_cast<long long>(radius); ++offset) {
-            const double weight = static_cast<double>(radius + 1) - std::abs(static_cast<double>(offset));
-            const size_t j = wrapIndex(static_cast<long long>(i) + offset, values.size());
-            weighted_sum += weight * values[j];
-            weight_total += weight;
-        }
-        smoothed[i] = (weight_total > 0.0) ? (weighted_sum / weight_total) : values[i];
-    }
-    return smoothed;
-}
-
-} // namespace
-
 QuasiSteadyStateSolver::QuasiSteadyStateSolver(const TrackData& track, const VehicleParams& vehicle)
-    : track_(track),
-      vehicle_(vehicle),
-      n_points_(0),
-      lap_time_(0.0),
-      top_speed_cap_(0.0),
-      estimated_track_width_(std::clamp(vehicle.mass.wheelbase * 0.35 + 0.65, 1.1, 2.0)),
-      converged_(false),
-      iterations_used_(0) {
+    : QuasiSteadyStateSolver(track, vehicle, SolverOptions{}) {
+}
+
+QuasiSteadyStateSolver::QuasiSteadyStateSolver(const TrackData& track, const VehicleParams& vehicle,
+                                               const SolverOptions& options)
+    : track_(track), vehicle_(vehicle), options_(options) {
     if (!track_.isPreprocessed()) {
         throw std::runtime_error("Track must be preprocessed before solving");
     }
     if (!vehicle_.validate()) {
         throw std::runtime_error("Vehicle parameters are invalid");
     }
-
-    aero_ = std::make_unique<AerodynamicsModel>(vehicle_.aero);
-    tire_ = std::make_unique<TireModel>(
-        vehicle_.tire,
-        vehicle_.mass.mass * VehicleParams::GRAVITY / 4.0);
-    powertrain_model_ = std::make_unique<PowertrainModel>(
-        vehicle_.powertrain,
-        vehicle_.tire.tire_radius);
-    ggv_ = std::make_unique<GGVGenerator>(vehicle_);
+    model_ = std::make_unique<VehicleModel>(vehicle_);
 }
 
-void QuasiSteadyStateSolver::initialize() {
-    if (working_track_.empty()) {
-        buildWorkingTrack();
-    }
-
-    const int top_gear = static_cast<int>(vehicle_.powertrain.gear_ratios.size());
-    const double gear_limited_speed = powertrain_model_->getTopSpeedForGear(top_gear);
-    const double aero_limited_speed = vehicle_.getMaxTheoreticalSpeed();
-
-    top_speed_cap_ = std::max(
-        20.0,
-        std::min(
-            (gear_limited_speed > 1.0 ? gear_limited_speed * 1.02 : aero_limited_speed * 1.05),
-            aero_limited_speed * 1.08));
-
-    const double ggv_v_max = std::max(top_speed_cap_ + 5.0, 50.0);
-    ggv_->generate(0.0, ggv_v_max, 0.5, 60.0, 1.0);
-
-    v_corner_.assign(n_points_, top_speed_cap_);
-    v_optimal_.assign(n_points_, top_speed_cap_);
-    gear_profile_.assign(n_points_, 1);
-    shift_profile_.assign(n_points_, false);
-}
-
-void QuasiSteadyStateSolver::buildWorkingTrack() {
-    const double input_step = track_.getTotalLength() / static_cast<double>(track_.getNumPoints());
-    const double target_step = std::clamp(input_step / 4.0, 0.75, 2.0);
-
-    n_points_ = std::max(
-        track_.getNumPoints(),
-        static_cast<size_t>(std::ceil(track_.getTotalLength() / target_step)));
-
-    const double ds = track_.getTotalLength() / static_cast<double>(n_points_);
-    working_track_.assign(n_points_, {});
-    std::vector<double> center_x(n_points_, 0.0);
-    std::vector<double> center_y(n_points_, 0.0);
-    std::vector<double> center_psi(n_points_, 0.0);
-
-    for (size_t i = 0; i < n_points_; ++i) {
-        const double s = ds * static_cast<double>(i);
-        const TrackPoint point = track_.interpolateAt(s);
-        SolverTrackPoint sample;
-        sample.s = s;
-        sample.ds = ds;
-        sample.x = point.x;
-        sample.y = point.y;
-        sample.z = point.z;
-        sample.w_tr_left = point.w_tr_left;
-        sample.w_tr_right = point.w_tr_right;
-        sample.banking = point.banking;
-        working_track_[i] = sample;
-        center_x[i] = sample.x;
-        center_y[i] = sample.y;
-    }
-
-    const size_t deriv_stride = std::max<size_t>(1, static_cast<size_t>(std::lround(3.0 / ds)));
-
-    for (size_t i = 0; i < n_points_; ++i) {
-        const size_t prev = wrapIndex(static_cast<long long>(i) - static_cast<long long>(deriv_stride), n_points_);
-        const size_t next = wrapIndex(static_cast<long long>(i) + static_cast<long long>(deriv_stride), n_points_);
-        const double h = static_cast<double>(deriv_stride) * ds;
-
-        const double dx = (center_x[next] - center_x[prev]) / (2.0 * h);
-        const double dy = (center_y[next] - center_y[prev]) / (2.0 * h);
-        center_psi[i] = std::atan2(dy, dx);
-    }
-
-    const size_t line_radius = std::max<size_t>(2, static_cast<size_t>(std::lround(18.0 / ds)));
-    const std::vector<double> smooth_x = smoothCircular(center_x, line_radius);
-    const std::vector<double> smooth_y = smoothCircular(center_y, line_radius);
-    std::vector<double> lateral_offset(n_points_, 0.0);
-
-    for (size_t i = 0; i < n_points_; ++i) {
-        const double nx = -std::sin(center_psi[i]);
-        const double ny = std::cos(center_psi[i]);
-        const double dx = smooth_x[i] - center_x[i];
-        const double dy = smooth_y[i] - center_y[i];
-        const double max_left = 0.95 * working_track_[i].w_tr_left;
-        const double max_right = 0.95 * working_track_[i].w_tr_right;
-        lateral_offset[i] = std::clamp(dx * nx + dy * ny, -max_right, max_left);
-    }
-
-    const size_t offset_radius = std::max<size_t>(1, static_cast<size_t>(std::lround(8.0 / ds)));
-    lateral_offset = smoothCircular(lateral_offset, offset_radius);
-
-    for (size_t i = 0; i < n_points_; ++i) {
-        const double nx = -std::sin(center_psi[i]);
-        const double ny = std::cos(center_psi[i]);
-        const double max_left = 0.98 * working_track_[i].w_tr_left;
-        const double max_right = 0.98 * working_track_[i].w_tr_right;
-        working_track_[i].n = std::clamp(lateral_offset[i], -max_right, max_left);
-        working_track_[i].x = center_x[i] + working_track_[i].n * nx;
-        working_track_[i].y = center_y[i] + working_track_[i].n * ny;
-    }
-
-    std::vector<double> raw_kappa(n_points_, 0.0);
-    for (size_t i = 0; i < n_points_; ++i) {
-        const size_t prev = wrapIndex(static_cast<long long>(i) - static_cast<long long>(deriv_stride), n_points_);
-        const size_t next = wrapIndex(static_cast<long long>(i) + static_cast<long long>(deriv_stride), n_points_);
-        const double h = static_cast<double>(deriv_stride) * ds;
-
-        const double dx = (working_track_[next].x - working_track_[prev].x) / (2.0 * h);
-        const double dy = (working_track_[next].y - working_track_[prev].y) / (2.0 * h);
-        const double ddx = (working_track_[next].x - 2.0 * working_track_[i].x + working_track_[prev].x) / (h * h);
-        const double ddy = (working_track_[next].y - 2.0 * working_track_[i].y + working_track_[prev].y) / (h * h);
-        const double denom = std::pow(std::max(1e-9, dx * dx + dy * dy), 1.5);
-
-        working_track_[i].psi = std::atan2(dy, dx);
-        raw_kappa[i] = (dx * ddy - dy * ddx) / denom;
-    }
-
-    const size_t smooth_radius = std::max<size_t>(1, static_cast<size_t>(std::lround(12.0 / ds)));
-    std::vector<double> smoothed = smoothCircular(raw_kappa, smooth_radius);
-    smoothed = smoothCircular(smoothed, smooth_radius);
-
-    for (size_t i = 0; i < n_points_; ++i) {
-        working_track_[i].kappa = smoothed[i];
-    }
-}
-
-double QuasiSteadyStateSolver::solve(int max_iterations, double tolerance) {
-    initialize();
-
-    std::cout << "Initializing solver..." << std::endl;
-    std::cout << "  Input points: " << track_.getNumPoints()
-              << " | working points: " << n_points_
-              << " | ds: " << working_track_.front().ds << " m" << std::endl;
-    std::cout << "  Top-speed cap: " << top_speed_cap_ * 3.6 << " km/h" << std::endl;
-
-    calculateCorneringLimit();
-    v_optimal_ = v_corner_;
-
-    const size_t seed_index = static_cast<size_t>(
-        std::distance(v_corner_.begin(), std::min_element(v_corner_.begin(), v_corner_.end())));
-
-    double previous_lap_time = std::numeric_limits<double>::infinity();
+void QuasiSteadyStateSolver::updateVehicle(const VehicleParams& vehicle) {
+    // Construct first: an invalid update leaves the previous solver intact.
+    auto model = std::make_unique<VehicleModel>(vehicle, true, model_.get());
+    vehicle_ = vehicle;
+    model_ = std::move(model);
+    ggv_.reset();
+    v_corner_.clear();
+    v_.clear();
+    gear_.clear();
+    interrupted_.clear();
+    ers_force_.clear();
+    lap_time_ = 0.0;
     converged_ = false;
-
-    for (int iteration = 0; iteration < max_iterations; ++iteration) {
-        iterations_used_ = iteration + 1;
-
-        forwardIntegration(seed_index);
-        backwardIntegration(seed_index);
-        updateGearProfile();
-
-        lap_time_ = calculateLapTime();
-        const double lap_time_change = std::isfinite(previous_lap_time)
-            ? std::abs(lap_time_ - previous_lap_time)
-            : std::numeric_limits<double>::infinity();
-
-        std::cout << "Iteration " << (iteration + 1)
-                  << ": lap time = " << lap_time_
-                  << " s, delta = " << (std::isfinite(lap_time_change) ? lap_time_change : 0.0)
-                  << std::endl;
-
-        if (lap_time_change < tolerance) {
-            converged_ = true;
-            break;
-        }
-
-        previous_lap_time = lap_time_;
-    }
-
-    if (!converged_) {
-        std::cout << "Warning: solver reached iteration limit without strict convergence" << std::endl;
-    }
-
-    std::cout << "Final lap time: " << lap_time_ << " seconds" << std::endl;
-    return lap_time_;
+    iterations_used_ = 0;
+    car_updated_ = true;
+    // Keep the previous clip as a candidate only; energy feasibility must be
+    // rechecked against the new car before using it as a bracket.
 }
 
-void QuasiSteadyStateSolver::calculateCorneringLimit() {
-    double min_speed = std::numeric_limits<double>::max();
-    double max_speed = 0.0;
+namespace {
 
+/// Key identifying a racing line: track geometry + every option that changes the line.
+std::string lineCacheKey(const TrackData& track, const LineOptions& line) {
+    std::ostringstream key;
+    // Ordered bitwise hash: a sum aliases permuted tracks and compensating edits.
+    uint64_t hash = 14695981039346656037ULL;
+    auto add = [&](double value) {
+        uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        for (int byte = 0; byte < 8; ++byte) {
+            hash ^= (bits >> (8 * byte)) & 0xff;
+            hash *= 1099511628211ULL;
+        }
+    };
+    for (const TrackPoint& p : track.getPoints()) {
+        for (double value : {p.x, p.y, p.w_tr_left, p.w_tr_right, p.z, p.banking}) add(value);
+    }
+    for (const auto* values : {&line.length_weight_s, &line.length_weight_value, &line.given_s, &line.given_offset}) {
+        add(static_cast<double>(values->size()));
+        for (double value : *values) add(value);
+    }
+    key << std::setprecision(17) << "v5 n=" << track.getNumPoints() << " hash=" << hash
+        << " mode=" << static_cast<int>(line.mode) << " margin=" << line.edge_margin
+        << " step=" << line.optimisation_step << " out=" << line.output_step
+        << " smooth=" << line.curvature_smoothing << " ref=" << line.reference_smoothing
+        << " tol=" << line.tolerance << " sweeps=" << line.max_sweeps << " lw=" << line.length_weight
+        << " zs=" << line.elevation_smoothing << " kvmax=" << line.max_vertical_curvature;
+    double weight_hash = 0.0;
+    for (size_t i = 0; i < line.length_weight_s.size() && i < line.length_weight_value.size(); ++i) {
+        weight_hash += (static_cast<double>(i % 97) + 1.0) * line.length_weight_value[i] + 1e-3 * line.length_weight_s[i];
+    }
+    key << " lwp=" << line.length_weight_s.size() << ":" << weight_hash;
+    double given_hash = 0.0;
+    for (size_t i = 0; i < line.given_s.size() && i < line.given_offset.size(); ++i) {
+        given_hash += (static_cast<double>(i % 89) + 1.0) * line.given_offset[i] + 1e-3 * line.given_s[i];
+    }
+    key << " given=" << line.given_s.size() << ":" << given_hash;
+    return key.str();
+}
+
+bool loadLineCache(const std::string& file, const std::string& key, RacingLineResult& result) {
+    std::ifstream in(file);
+    if (!in.is_open()) {
+        return false;
+    }
+    std::string header;
+    std::getline(in, header);
+    if (header != key) {
+        return false;
+    }
+    size_t count = 0;
+    in >> count >> result.length >> result.centerline_length >> result.sweeps >> result.residual >> result.max_curvature;
+    if (!in || count < 16 || count > 2000000 || !std::isfinite(result.length) || result.length <= 0.0) {
+        return false;
+    }
+    result.points.assign(count, PathPoint{});
+    for (PathPoint& p : result.points) {
+        in >> p.s >> p.ds >> p.x >> p.y >> p.z >> p.psi >> p.kappa >> p.n >> p.w_left >> p.w_right
+           >> p.banking >> p.grade >> p.vertical_curvature >> p.s_center;
+        for (double value : {p.s, p.ds, p.x, p.y, p.z, p.psi, p.kappa, p.n, p.w_left, p.w_right,
+                             p.banking, p.grade, p.vertical_curvature, p.s_center}) {
+            if (!std::isfinite(value)) return false;
+        }
+        if (p.ds <= 0.0) return false;
+    }
+    size_t nodes = 0;
+    in >> nodes;
+    if (!in || nodes < 4 || nodes > 2000000) return false;
+    result.node_s.resize(nodes);
+    result.node_offset.resize(nodes);
+    for (size_t i = 0; i < nodes; ++i) {
+        in >> result.node_s[i] >> result.node_offset[i];
+        if (!std::isfinite(result.node_s[i]) || !std::isfinite(result.node_offset[i])) return false;
+    }
+    return static_cast<bool>(in);
+}
+
+void saveLineCache(const std::string& file, const std::string& key, const RacingLineResult& result) {
+    const std::filesystem::path path(file);
+    if (path.has_parent_path()) {
+        std::filesystem::create_directories(path.parent_path());
+    }
+    // Write to a unique temporary file and rename it into place, so concurrent runs never see a
+    // partially written cache.
+    std::random_device rd;
+    const std::string tmp = file + ".tmp" + std::to_string(rd()) + std::to_string(rd());
+    {
+        std::ofstream out(tmp);
+        if (!out.is_open()) {
+            return;  // cache is an optimisation only
+        }
+        out << key << '\n' << std::setprecision(17) << result.points.size() << ' ' << result.length << ' '
+            << result.centerline_length << ' ' << result.sweeps << ' ' << result.residual << ' '
+            << result.max_curvature << '\n';
+        for (const PathPoint& p : result.points) {
+            out << p.s << ' ' << p.ds << ' ' << p.x << ' ' << p.y << ' ' << p.z << ' ' << p.psi << ' ' << p.kappa
+                << ' ' << p.n << ' ' << p.w_left << ' ' << p.w_right << ' ' << p.banking << ' ' << p.grade << ' '
+                << p.vertical_curvature << ' ' << p.s_center << '\n';
+        }
+        out << result.node_s.size() << '\n';
+        for (size_t i = 0; i < result.node_s.size(); ++i) {
+            out << result.node_s[i] << ' ' << result.node_offset[i] << '\n';
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, file, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+    }
+}
+
+} // namespace
+
+void QuasiSteadyStateSolver::buildPath() {
+    LineOptions line = options_.line;
+    if (!options_.override_edge_margin) {
+        line.edge_margin = vehicle_.line.edge_margin;
+    }
+    RacingLineResult result;
+    const std::string key = lineCacheKey(track_, line);
+    if (!path_.empty() && key == path_key_) {
+        stats_.line_cache_hit = true;
+        return;
+    }
+    stats_.line_cache_hit = false;
+    if (options_.line_cache.empty() || !loadLineCache(options_.line_cache, key, result)) {
+        result = RacingLine::build(track_, line);
+        if (!options_.line_cache.empty()) {
+            saveLineCache(options_.line_cache, key, result);
+        }
+    }
+    path_ = result.points;
+    line_node_s_ = std::move(result.node_s);
+    line_node_offset_ = std::move(result.node_offset);
+    path_key_ = key;
+    n_points_ = path_.size();
+    stats_.line_length = result.length;
+    stats_.centerline_length = result.centerline_length;
+    stats_.line_sweeps = result.sweeps;
+    stats_.max_path_curvature = result.max_curvature;
+
+    segments_.assign(n_points_, Segment{});
     for (size_t i = 0; i < n_points_; ++i) {
-        v_corner_[i] = solveCorneringVelocity(working_track_[i].kappa, working_track_[i].banking);
-        min_speed = std::min(min_speed, v_corner_[i]);
-        max_speed = std::max(max_speed, v_corner_[i]);
-    }
-
-    std::cout << "Cornering speed range: "
-              << min_speed * 3.6 << " to " << max_speed * 3.6 << " km/h" << std::endl;
-}
-
-void QuasiSteadyStateSolver::forwardIntegration(size_t seed_index) {
-    for (size_t offset = 0; offset < n_points_; ++offset) {
-        const size_t i = (seed_index + offset) % n_points_;
-        const size_t next = (i + 1) % n_points_;
-
-        const double ax = getMaxDriveAcceleration(
-            v_optimal_[i],
-            working_track_[i].kappa,
-            working_track_[i].banking);
-        const double next_speed_sq = std::max(
-            0.0,
-            v_optimal_[i] * v_optimal_[i] + 2.0 * ax * working_track_[i].ds);
-        const double next_speed = std::sqrt(next_speed_sq);
-
-        if (next_speed < v_optimal_[next]) {
-            v_optimal_[next] = next_speed;
-        }
+        const size_t j = (i + 1) % n_points_;
+        Segment& seg = segments_[i];
+        seg.kappa = 0.5 * (path_[i].kappa + path_[j].kappa);
+        seg.ds = path_[i].ds;
+        seg.rc.banking = 0.5 * (path_[i].banking + path_[j].banking);
+        seg.rc.grade = 0.5 * (path_[i].grade + path_[j].grade);
+        seg.rc.vertical_curvature = 0.5 * (path_[i].vertical_curvature + path_[j].vertical_curvature);
+        seg.rc.drs_open = false;
+        seg.rc_drs = seg.rc;
     }
 }
 
-void QuasiSteadyStateSolver::backwardIntegration(size_t seed_index) {
-    for (size_t offset = 0; offset < n_points_; ++offset) {
-        const size_t current = wrapIndex(
-            static_cast<long long>(seed_index) - static_cast<long long>(offset),
-            n_points_);
-        const size_t prev = wrapIndex(static_cast<long long>(current) - 1, n_points_);
-
-        const double ax = getMaxBrakeAcceleration(
-            v_optimal_[current],
-            working_track_[prev].kappa,
-            working_track_[prev].banking);
-        const double prev_speed_sq = std::max(
-            0.0,
-            v_optimal_[current] * v_optimal_[current] - 2.0 * ax * working_track_[prev].ds);
-        const double prev_speed = std::sqrt(prev_speed_sq);
-
-        if (prev_speed < v_optimal_[prev]) {
-            v_optimal_[prev] = prev_speed;
-        }
+void QuasiSteadyStateSolver::detectDRSZones() {
+    stats_.drs_zones = 0;
+    stats_.drs_length = 0.0;
+    for (Segment& seg : segments_) {
+        seg.drs_zone = false;
+        seg.rc_drs = seg.rc;
     }
-}
-
-void QuasiSteadyStateSolver::updateGearProfile() {
-    if (n_points_ == 0) {
+    const DRSParams& drs = vehicle_.aero.drs;
+    if (!options_.enable_drs || !drs.enabled || drs.drag_reduction <= 0.0) {
         return;
     }
 
-    const size_t seed_index = static_cast<size_t>(
-        std::distance(v_optimal_.begin(), std::min_element(v_optimal_.begin(), v_optimal_.end())));
-
-    int start_gear = 1;
-    for (int pass = 0; pass < 2; ++pass) {
-        int current_gear = start_gear;
-        std::fill(shift_profile_.begin(), shift_profile_.end(), false);
-
-        for (size_t offset = 0; offset < n_points_; ++offset) {
-            const size_t i = (seed_index + offset) % n_points_;
-            const size_t next = (i + 1) % n_points_;
-            const bool accelerating = v_optimal_[next] > v_optimal_[i] + 0.1;
-            const int recommended = powertrain_model_->getRecommendedGear(
-                v_optimal_[i],
-                current_gear,
-                accelerating);
-
-            shift_profile_[i] = accelerating && (recommended != current_gear);
-            current_gear = recommended;
-            gear_profile_[i] = current_gear;
+    std::vector<char> in_zone(n_points_, 0);
+    if (!drs.zones.empty()) {
+        for (size_t i = 0; i < n_points_; ++i) {
+            const double sc = path_[i].s_center;
+            for (const auto& [start, end] : drs.zones) {
+                const bool inside = (start <= end) ? (sc >= start && sc <= end) : (sc >= start || sc <= end);
+                if (inside) {
+                    in_zone[i] = 1;
+                }
+            }
         }
-
-        start_gear = current_gear;
+        stats_.drs_zones = static_cast<int>(drs.zones.size());
+    } else {
+        const double kappa_straight = 1.0 / std::max(1.0, drs.straight_radius);
+        std::vector<char> straight(n_points_, 0);
+        size_t first_curved = n_points_;
+        for (size_t i = 0; i < n_points_; ++i) {
+            straight[i] = std::abs(path_[i].kappa) < kappa_straight ? 1 : 0;
+            if (!straight[i] && first_curved == n_points_) {
+                first_curved = i;
+            }
+        }
+        struct Run {
+            size_t start;
+            size_t count;
+            double length;
+        };
+        std::vector<Run> runs;
+        if (first_curved == n_points_) {
+            runs.push_back({0, n_points_, stats_.line_length});
+        } else {
+            size_t k = 0;
+            while (k < n_points_) {
+                const size_t i = (first_curved + k) % n_points_;
+                if (!straight[i]) {
+                    ++k;
+                    continue;
+                }
+                Run run{i, 0, 0.0};
+                while (k < n_points_ && straight[(first_curved + k) % n_points_]) {
+                    run.length += path_[(first_curved + k) % n_points_].ds;
+                    ++run.count;
+                    ++k;
+                }
+                runs.push_back(run);
+            }
+        }
+        std::sort(runs.begin(), runs.end(), [](const Run& a, const Run& b) { return a.length > b.length; });
+        for (const Run& run : runs) {
+            if (stats_.drs_zones >= drs.max_zones || run.length < drs.min_zone_length) {
+                break;
+            }
+            for (size_t c = 0; c < run.count; ++c) {
+                in_zone[(run.start + c) % n_points_] = 1;
+            }
+            ++stats_.drs_zones;
+        }
     }
-}
-
-double QuasiSteadyStateSolver::calculateLapTime() const {
-    double total_time = 0.0;
 
     for (size_t i = 0; i < n_points_; ++i) {
-        const size_t next = (i + 1) % n_points_;
-        const double average_speed = 0.5 * (v_optimal_[i] + v_optimal_[next]);
-        total_time += working_track_[i].ds / std::max(0.5, average_speed);
+        if (in_zone[i]) {
+            segments_[i].drs_zone = true;
+            segments_[i].rc_drs.drs_open = true;
+            stats_.drs_length += segments_[i].ds;
+        }
+    }
+}
 
-        if (i < shift_profile_.size() && shift_profile_[i]) {
-            total_time += vehicle_.powertrain.shift_time;
+void QuasiSteadyStateSolver::calculateCorneringLimit() {
+    v_corner_.assign(n_points_, v_cap_);
+    for (size_t i = 0; i < n_points_; ++i) {
+        RoadConditions rc;
+        rc.banking = path_[i].banking;
+        rc.grade = path_[i].grade;
+        rc.vertical_curvature = path_[i].vertical_curvature;
+        v_corner_[i] = model_->maxCorneringSpeed(path_[i].kappa, rc, v_cap_);
+    }
+    seed_ = static_cast<size_t>(std::distance(v_corner_.begin(), std::min_element(v_corner_.begin(), v_corner_.end())));
+}
+
+QuasiSteadyStateSolver::Profile QuasiSteadyStateSolver::computeProfile(double v_clip, bool ers_on) const {
+    const size_t N = n_points_;
+    Profile P;
+    P.v = v_corner_;
+    P.gear.assign(N, 1);
+    P.interrupted.assign(N, 0);
+    P.ers_force.assign(N, 0.0);
+
+    const double shift_time = vehicle_.powertrain.shift_time;
+
+    // ---- Forward pass: maximum acceleration -------------------------------------------------
+    int current_gear = model_->engine(P.v[seed_]).gear;
+    double shift_timer = 0.0;
+    for (size_t k = 0; k < N; ++k) {
+        const size_t i = (seed_ + k) % N;
+        const size_t j = (i + 1) % N;
+        const Segment& seg = segments_[i];
+        const double vi = P.v[i];
+
+        // Gear choice with hysteresis: upshift when the next gear gives more drive force (or the
+        // engine hits the limiter), downshift only for a clear gain. Prevents gear hunting when a
+        // shift interruption briefly drops the speed back below the shift point.
+        const PowertrainOperatingPoint best = model_->engine(vi);
+        const PowertrainOperatingPoint in_gear = model_->engineInGear(vi, current_gear);
+        if (best.gear > current_gear && (!in_gear.valid || best.wheel_force > in_gear.wheel_force)) {
+            current_gear = best.gear;
+            ++P.upshifts;
+            if (shift_time > 0.0) {
+                shift_timer = shift_time;
+            }
+        } else if (best.gear < current_gear &&
+                   (!in_gear.valid || best.wheel_force > 1.03 * in_gear.wheel_force) &&
+                   model_->rpmAt(vi, best.gear) < 0.97 * vehicle_.powertrain.max_rpm) {
+            current_gear = best.gear;  // never drop into a gear that would sit on the limiter
+        }
+        P.gear[i] = current_gear;
+        const bool interrupted = shift_timer > 0.0;
+        P.interrupted[i] = interrupted ? 1 : 0;
+
+        const int gear_now = current_gear;
+        auto propulsion = [&](double v) {
+            if (interrupted) {
+                return 0.0;
+            }
+            const PowertrainOperatingPoint op = model_->engineInGear(v, gear_now);
+            const PowertrainOperatingPoint usable = op.valid ? op : model_->engine(v);
+            double force = usable.wheel_force;
+            if (usable.valid && ers_on && v < v_clip) {
+                force += model_->ersForce(v);
+            }
+            return force;
+        };
+
+        const RoadConditions& rc = seg.rc_drs;
+        const double a1 = model_->maxAcceleration(vi, seg.kappa, rc, propulsion(vi), current_gear);
+        const double v_mid = std::sqrt(std::max(1e-4, vi * vi + a1 * seg.ds));
+        const double a2 = model_->maxAcceleration(v_mid, seg.kappa, rc, propulsion(v_mid), current_gear);
+        const double v_next = std::sqrt(std::max(1e-4, vi * vi + 2.0 * a2 * seg.ds));
+        if (v_next < P.v[j]) {
+            P.v[j] = v_next;
+        }
+        if (shift_timer > 0.0) {
+            shift_timer -= 2.0 * seg.ds / std::max(0.1, vi + P.v[j]);
         }
     }
 
-    return total_time;
-}
-
-double QuasiSteadyStateSolver::solveCorneringVelocity(double kappa, double banking) const {
-    if (std::abs(kappa) < 1e-6) {
-        return top_speed_cap_;
-    }
-
-    double low = 0.0;
-    double high = top_speed_cap_;
-
-    for (int iteration = 0; iteration < 50; ++iteration) {
-        const double mid = 0.5 * (low + high);
-        const double lateral_accel = mid * mid * std::abs(kappa);
-        const double Fy_required = getLateralForceDemand(mid, kappa, banking);
-        const double Fy_available = getMaxLateralTireForce(getVerticalLoad(mid, banking), lateral_accel);
-
-        if (Fy_required <= Fy_available) {
-            low = mid;
-        } else {
-            high = mid;
+    // ---- Backward pass: maximum braking -----------------------------------------------------
+    for (size_t k = 0; k < N; ++k) {
+        const size_t j = (seed_ + N - k) % N;
+        const size_t i = (j + N - 1) % N;
+        const Segment& seg = segments_[i];
+        const double vj = P.v[j];
+        const double d1 = model_->maxDeceleration(vj, seg.kappa, seg.rc);
+        const double v_mid = std::sqrt(vj * vj + d1 * seg.ds);
+        const double d2 = model_->maxDeceleration(v_mid, seg.kappa, seg.rc);
+        const double v_prev = std::sqrt(vj * vj + 2.0 * d2 * seg.ds);
+        if (v_prev < P.v[i]) {
+            P.v[i] = v_prev;
         }
     }
 
-    return low;
+    // ---- Lap time and energy accounting ------------------------------------------------------
+    const double eta = vehicle_.powertrain.drivetrain_efficiency;
+    for (size_t i = 0; i < N; ++i) {
+        const size_t j = (i + 1) % N;
+        const Segment& seg = segments_[i];
+        const double vi = P.v[i];
+        const double vj = P.v[j];
+        const double dt = 2.0 * seg.ds / std::max(0.1, vi + vj);
+        P.lap_time += dt;
+
+        const double a = (vj * vj - vi * vi) / (2.0 * seg.ds);
+        const double v_mid = 0.5 * (vi + vj);
+        const bool accelerating = a > 0.0;
+        const RoadConditions& rc = accelerating ? seg.rc_drs : seg.rc;
+        const double resist = model_->resistance(v_mid, seg.kappa, rc);
+        const double force_needed = model_->effectiveMassPowered(P.gear[i]) * a + resist;
+        if (force_needed < -1.0 && a < 0.0) {
+            const double brake_needed = model_->mass() * (-a) - resist;
+            if (brake_needed > 0.02 * model_->mass() * model_->gravity()) {
+                P.braking_time += dt;
+            }
+            continue;
+        }
+        if (force_needed <= 0.0) {
+            continue;
+        }
+        const auto in_gear = model_->engineInGear(v_mid, P.gear[i]);
+        const double engine_force = P.interrupted[i] ? 0.0 :
+                                    (in_gear.valid ? in_gear.wheel_force : model_->engine(v_mid).wheel_force);
+        const bool usable_gear = in_gear.valid || model_->engine(v_mid).valid;
+        const double ers_available = (usable_gear && ers_on && !P.interrupted[i] && v_mid < v_clip) ? model_->ersForce(v_mid) : 0.0;
+        const double ers_used = std::clamp(force_needed - engine_force, 0.0, ers_available);
+        P.ers_force[i] = ers_used;
+        P.ers_energy += ers_used * seg.ds / eta;
+        const double available = engine_force + ers_available;
+        if (available > 0.0 && force_needed >= 0.98 * available) {
+            P.full_throttle_time += dt;
+        }
+    }
+    return P;
 }
 
-double QuasiSteadyStateSolver::getVerticalLoad(double velocity, double banking) const {
-    const double static_load = vehicle_.mass.mass * VehicleParams::GRAVITY * std::max(0.0, std::cos(banking));
-    return std::max(0.0, static_load + aero_->getDownforce(velocity));
+double QuasiSteadyStateSolver::energyBudget(const Profile& profile) const {
+    const ERSParams& ers = vehicle_.powertrain.ers;
+    if (ers.energy_per_lap <= 0.0) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return ers.energy_per_lap + ers.recovery_power * profile.full_throttle_time;
 }
 
-double QuasiSteadyStateSolver::getLateralForceDemand(double velocity, double curvature, double banking) const {
-    const double lateral_accel = velocity * velocity * std::abs(curvature);
-    const double bank_support = VehicleParams::GRAVITY * std::sin(banking);
-    return vehicle_.mass.mass * std::max(0.0, lateral_accel - bank_support);
-}
+double QuasiSteadyStateSolver::solve(int max_iterations, double tolerance) {
+    if (max_iterations < 1 || !std::isfinite(tolerance) || tolerance <= 0.0) {
+        throw std::invalid_argument("Solver iterations and tolerance must be positive and finite");
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    std::ostream& log = std::cout;
 
-double QuasiSteadyStateSolver::getMaxLateralTireForce(double Fz_total, double lateral_accel) const {
-    const double wheel_load = Fz_total / 4.0;
-    const double load_transfer = vehicle_.mass.mass * std::abs(lateral_accel) *
-        vehicle_.mass.cog_height / std::max(estimated_track_width_, 1.0);
-    const double outside_load = std::max(0.0, wheel_load + 0.25 * load_transfer);
-    const double inside_load = std::max(0.0, wheel_load - 0.25 * load_transfer);
+    buildPath();
+    detectDRSZones();
+    if (!stats_.line_cache_hit) have_clip_bracket_ = false;
 
-    const double mu_outside = tire_->getEffectiveMu(outside_load * 4.0, vehicle_.tire.mu_y);
-    const double mu_inside = tire_->getEffectiveMu(inside_load * 4.0, vehicle_.tire.mu_y);
-    return 2.0 * mu_outside * outside_load + 2.0 * mu_inside * inside_load;
-}
-
-double QuasiSteadyStateSolver::getMaxLongitudinalTireForce(double Fz_total, double lateral_accel) const {
-    const double wheel_load = Fz_total / 4.0;
-    const double load_transfer = vehicle_.mass.mass * std::abs(lateral_accel) *
-        vehicle_.mass.cog_height / std::max(estimated_track_width_, 1.0);
-    const double outside_load = std::max(0.0, wheel_load + 0.25 * load_transfer);
-    const double inside_load = std::max(0.0, wheel_load - 0.25 * load_transfer);
-
-    const double mu_outside = tire_->getEffectiveMu(outside_load * 4.0, vehicle_.tire.mu_x);
-    const double mu_inside = tire_->getEffectiveMu(inside_load * 4.0, vehicle_.tire.mu_x);
-    return 2.0 * mu_outside * outside_load + 2.0 * mu_inside * inside_load;
-}
-
-double QuasiSteadyStateSolver::getAvailableLongitudinalTireForce(
-    double Fz_total,
-    double Fy_current,
-    double lateral_accel) const {
-    const double Fy_max = getMaxLateralTireForce(Fz_total, lateral_accel);
-    const double Fx_max = getMaxLongitudinalTireForce(Fz_total, lateral_accel);
-    if (Fy_max <= 0.0 || Fx_max <= 0.0) {
-        return 0.0;
+    ers_active_ = options_.enable_ers && model_->hasERS();
+    const bool drs_possible = stats_.drs_zones > 0;
+    // updateVehicle invalidates corner limits. Geometry and road conditions
+    // are independently guarded by the path key.
+    if (!stats_.line_cache_hit || v_corner_.empty()) {
+        v_cap_ = std::max(30.0, model_->topSpeed(drs_possible, ers_active_) * 1.03 + 1.0);
+        calculateCorneringLimit();
     }
 
-    const double usage = std::abs(Fy_current) / Fy_max;
-    if (usage >= 1.0) {
-        return 0.0;
+    if (options_.verbose) {
+        log << "Initializing solver..." << std::endl;
+        log << "  Centreline length: " << std::fixed << std::setprecision(1) << stats_.centerline_length
+            << " m | driven path: " << stats_.line_length << " m | points: " << n_points_
+            << " | ds: " << std::setprecision(3) << (n_points_ ? path_[0].ds : 0.0) << " m" << std::endl;
+        log << "  Racing line: "
+            << (options_.line.mode == LineMode::MinimumCurvature ? "minimum curvature" : "centreline")
+            << " (" << stats_.line_sweeps << " sweeps), tightest radius "
+            << std::setprecision(1) << (stats_.max_path_curvature > 0.0 ? 1.0 / stats_.max_path_curvature : 0.0)
+            << " m" << std::endl;
+        log << "  DRS zones: " << stats_.drs_zones << " (" << std::setprecision(0) << stats_.drs_length << " m)"
+            << " | ERS: " << (ers_active_ ? "on" : "off")
+            << " | speed cap: " << std::setprecision(1) << v_cap_ * 3.6 << " km/h" << std::endl;
+        const auto [mn, mx] = std::minmax_element(v_corner_.begin(), v_corner_.end());
+        log << "Cornering speed range: " << *mn * 3.6 << " to " << *mx * 3.6 << " km/h" << std::endl;
     }
 
-    return Fx_max * std::sqrt(std::max(0.0, 1.0 - usage * usage));
-}
+    iterations_used_ = 1;
+    v_clip_ = std::numeric_limits<double>::infinity();
+    Profile best = computeProfile(v_clip_, ers_active_);
+    double budget = energyBudget(best);
+    converged_ = true;
 
-double QuasiSteadyStateSolver::getMaxDriveAcceleration(double velocity, double curvature, double banking) const {
-    const double Fz = getVerticalLoad(velocity, banking);
-    const double lateral_accel = velocity * velocity * std::abs(curvature);
-    const double Fy = getLateralForceDemand(velocity, curvature, banking);
-    const double Fx_tire = getAvailableLongitudinalTireForce(Fz, Fy, lateral_accel);
-    const PowertrainOperatingPoint power = powertrain_model_->getBestAccelerationPoint(velocity);
-    const double drive_force = std::min(Fx_tire, power.wheel_force);
-    return (drive_force - aero_->getDragForce(velocity)) / vehicle_.mass.mass;
-}
+    if (ers_active_ && best.ers_energy > budget) {
+        // Energy limited: deploy only below a clipping speed, found by bisection.
+        double lo = 0.0;
+        double hi = v_cap_;
+        Profile lo_profile = computeProfile(lo, ers_active_);
+        Profile hi_profile = best;
+        ++iterations_used_;
+        converged_ = false;
+        if (have_clip_bracket_) {
+            // Re-evaluate both endpoints, never reuse a prior energy estimate.
+            // An unchanged car uses its exact old bracket; a setup update gets
+            // a wider initial bracket and falls back if it no longer encloses
+            // the root. The final solution always stays on the feasible side.
+            const double trial_lo = car_updated_ ? std::max(0.0, clip_lo_ - 2.0) : clip_lo_;
+            const double trial_hi = car_updated_ ? std::min(v_cap_, clip_hi_ + 2.0) : clip_hi_;
+            Profile lower = computeProfile(trial_lo, ers_active_);
+            Profile upper = computeProfile(trial_hi, ers_active_);
+            iterations_used_ += 2;
+            if (lower.ers_energy <= energyBudget(lower) && upper.ers_energy > energyBudget(upper)) {
+                lo = trial_lo;
+                hi = trial_hi;
+                lo_profile = std::move(lower);
+                hi_profile = std::move(upper);
+            }
+        }
+        for (int it = 0; it < std::max(1, max_iterations); ++it) {
+            if (std::abs(lo_profile.lap_time - hi_profile.lap_time) < tolerance || hi - lo < 0.01) {
+                converged_ = true;
+                break;
+            }
+            const double mid = 0.5 * (lo + hi);
+            Profile p = computeProfile(mid, ers_active_);
+            ++iterations_used_;
+            if (p.ers_energy <= energyBudget(p)) {
+                lo = mid;
+                lo_profile = std::move(p);
+            } else {
+                hi = mid;
+                hi_profile = std::move(p);
+            }
+            if (std::abs(lo_profile.lap_time - hi_profile.lap_time) < tolerance || hi - lo < 0.01) {
+                converged_ = true;
+                break;
+            }
+            if (options_.verbose) {
+                log << "Iteration " << iterations_used_ << ": ERS clip " << std::setprecision(1) << mid * 3.6
+                    << " km/h, lap time = " << std::setprecision(4) << lo_profile.lap_time << " s" << std::endl;
+            }
+        }
+        clip_lo_ = lo;
+        clip_hi_ = hi;
+        have_clip_bracket_ = converged_;
+        v_clip_ = lo;
+        best = std::move(lo_profile);
+        budget = energyBudget(best);
+    } else {
+        have_clip_bracket_ = false;
+    }
+    car_updated_ = false;
 
-double QuasiSteadyStateSolver::getMaxBrakeAcceleration(double velocity, double curvature, double banking) const {
-    const double Fz = getVerticalLoad(velocity, banking);
-    const double lateral_accel = velocity * velocity * std::abs(curvature);
-    const double Fy = getLateralForceDemand(velocity, curvature, banking);
-    const double Fx_tire = getAvailableLongitudinalTireForce(Fz, Fy, lateral_accel);
-    const double brake_force = std::min(vehicle_.brake.max_brake_force, Fx_tire);
-    return -(brake_force + aero_->getDragForce(velocity)) / vehicle_.mass.mass;
+    v_ = best.v;
+    gear_ = best.gear;
+    interrupted_ = best.interrupted;
+    ers_force_ = best.ers_force;
+    lap_time_ = best.lap_time;
+
+    stats_.top_speed = *std::max_element(v_.begin(), v_.end());
+    stats_.min_speed = *std::min_element(v_.begin(), v_.end());
+    stats_.avg_speed = stats_.line_length / lap_time_;
+    stats_.ers_energy_used = best.ers_energy;
+    stats_.ers_energy_budget = budget;
+    stats_.ers_clip_speed = v_clip_;
+    stats_.full_throttle_fraction = best.full_throttle_time / lap_time_;
+    stats_.braking_fraction = best.braking_time / lap_time_;
+    stats_.upshifts = best.upshifts;
+
+    stats_.solve_time_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+
+    if (options_.verbose) {
+        log << std::setprecision(1)
+            << "Top speed " << stats_.top_speed * 3.6 << " km/h | min speed " << stats_.min_speed * 3.6
+            << " km/h | full throttle " << stats_.full_throttle_fraction * 100.0 << " %" << std::endl;
+        if (ers_active_) {
+            log << "ERS: used " << std::setprecision(2) << stats_.ers_energy_used / 1e6 << " MJ of "
+                << (std::isfinite(budget) ? budget / 1e6 : 0.0) << (std::isfinite(budget) ? " MJ" : " (unlimited)");
+            if (std::isfinite(v_clip_)) {
+                log << ", clipping above " << std::setprecision(1) << v_clip_ * 3.6 << " km/h";
+            }
+            log << std::endl;
+        }
+        log << "Final lap time: " << std::setprecision(3) << lap_time_ << " seconds ("
+            << std::setprecision(0) << stats_.solve_time_ms << " ms)" << std::endl;
+    }
+    return lap_time_;
 }
 
 LapResult QuasiSteadyStateSolver::getDetailedResult() const {
+    if (v_.empty()) throw std::runtime_error("Run solve() after constructing or updating the vehicle");
     LapResult result;
     result.setLapTime(lap_time_);
-    result.setTotalDistance(track_.getTotalLength());
+    result.setTotalDistance(stats_.line_length);
 
-    double cumulative_time = 0.0;
+    double time = 0.0;
     for (size_t i = 0; i < n_points_; ++i) {
-        result.addState(createState(i, cumulative_time, gear_profile_.empty() ? 1 : gear_profile_[i]));
-
-        const size_t next = (i + 1) % n_points_;
-        const double average_speed = 0.5 * (v_optimal_[i] + v_optimal_[next]);
-        cumulative_time += working_track_[i].ds / std::max(0.5, average_speed);
-        if (i < shift_profile_.size() && shift_profile_[i]) {
-            cumulative_time += vehicle_.powertrain.shift_time;
-        }
+        result.addState(createState(i, time));
+        const size_t j = (i + 1) % n_points_;
+        time += 2.0 * segments_[i].ds / std::max(0.1, v_[i] + v_[j]);
     }
-
+    // Close the periodic lap explicitly so exported telemetry includes its final segment.
+    auto closing_state = createState(0, lap_time_);
+    closing_state.s = stats_.line_length;
+    result.addState(closing_state);
     return result;
 }
 
-SimulationState QuasiSteadyStateSolver::createState(size_t index, double time, int gear) const {
+SimulationState QuasiSteadyStateSolver::createState(size_t index, double time) const {
     SimulationState state;
     const size_t next = (index + 1) % n_points_;
-    const SolverTrackPoint& point = working_track_[index];
+    const PathPoint& point = path_[index];
+    const Segment& seg = segments_[index];
+    const double m = model_->mass();
 
-    const double velocity = v_optimal_[index];
-    const double next_velocity = v_optimal_[next];
-    const double ax = (next_velocity * next_velocity - velocity * velocity) / (2.0 * point.ds);
-    const double downforce = aero_->getDownforce(velocity);
-    const double drag_force = aero_->getDragForce(velocity);
-    const double vertical_load = getVerticalLoad(velocity, point.banking);
-    const double lateral_accel = velocity * velocity * std::abs(point.kappa);
-    const double lateral_force = getLateralForceDemand(velocity, point.kappa, point.banking);
-    const double signed_lateral_force = std::copysign(lateral_force, point.kappa);
-    const double Fx_limit = getAvailableLongitudinalTireForce(vertical_load, lateral_force, lateral_accel);
+    const double v = v_[index];
+    const double v_next = v_[next];
+    const double ax = (v_next * v_next - v * v) / (2.0 * seg.ds);
+    const bool accelerating = ax > 0.05;
+    const bool braking = ax < -0.05;
+    const bool drs_open = seg.drs_zone && accelerating;
 
-    const PowertrainOperatingPoint power_at_full = powertrain_model_->getOperatingPoint(velocity, gear, 1.0);
-    const double max_drive_force = std::min(Fx_limit, power_at_full.wheel_force);
-    const double max_brake_force = std::min(vehicle_.brake.max_brake_force, Fx_limit);
+    RoadConditions rc;
+    rc.banking = point.banking;
+    rc.grade = point.grade;
+    rc.vertical_curvature = point.vertical_curvature;
+    rc.drs_open = drs_open;
 
-    const double net_force = vehicle_.mass.mass * ax;
+    const int gear = accelerating ? gear_[index] : model_->engine(v).gear;
+    const double resist = model_->resistance(v, point.kappa, rc);
+    const auto in_gear = model_->engineInGear(v, gear);
+    const double engine_force = interrupted_[index] ? 0.0 :
+                                (in_gear.valid ? in_gear.wheel_force : model_->engine(v).wheel_force);
+    const double ers_force = ers_force_.empty() ? 0.0 : ers_force_[index];
+    const double ers_available = (ers_active_ && !interrupted_[index] && v < v_clip_) ? model_->ersForce(v) : 0.0;
+
+    ForceBreakdown fb;
     double drive_force = 0.0;
     double brake_force = 0.0;
     double throttle = 0.0;
     double brake = 0.0;
+    double fx_capacity = 0.0;
 
-    if (net_force > 25.0) {
-        drive_force = std::max(0.0, net_force + drag_force);
-        throttle = (max_drive_force > 1.0) ? std::clamp(drive_force / max_drive_force, 0.0, 1.0) : 0.0;
-    } else if (net_force < -25.0) {
-        brake_force = std::max(0.0, -net_force - drag_force);
-        brake = (max_brake_force > 1.0) ? std::clamp(brake_force / max_brake_force, 0.0, 1.0) : 0.0;
+    if (braking) {
+        model_->maxDeceleration(v, point.kappa, rc, &fb);
+        brake_force = std::max(0.0, m * (-ax) - resist);
+        fx_capacity = fb.fx_tyre_limit;
+        brake = (fb.fx_tyre_limit > 1.0) ? std::clamp(brake_force / fb.fx_tyre_limit, 0.0, 1.0) : 0.0;
     } else {
-        drive_force = std::max(0.0, drag_force);
-        throttle = (max_drive_force > 1.0) ? std::clamp(drive_force / max_drive_force, 0.0, 0.25) : 0.0;
+        model_->maxAcceleration(v, point.kappa, rc, engine_force + ers_available, gear, &fb);
+        drive_force = std::max(0.0, model_->effectiveMassPowered(gear) * ax + resist);
+        fx_capacity = fb.fx_tyre_limit;
+        const double available = engine_force + ers_available;
+        throttle = (available > 1.0) ? std::clamp(drive_force / available, 0.0, 1.0) : 0.0;
     }
 
-    const double ratio = powertrain_model_->getOverallRatio(gear);
-    double rpm = powertrain_model_->getRPM(velocity, gear);
+    const double ratio = model_->overallRatio(gear);
+    double rpm = model_->rpmAt(v, gear);
     if (throttle > 0.05) {
         rpm = std::max(rpm, vehicle_.powertrain.min_rpm);
     }
+    const double engine_part = std::max(0.0, drive_force - ers_force);
+    const double engine_torque = (ratio > 0.0) ? engine_part * vehicle_.tire.tire_radius /
+                                                     (ratio * vehicle_.powertrain.drivetrain_efficiency)
+                                               : 0.0;
 
-    const double engine_torque = (throttle > 0.0 && ratio > 0.0 && vehicle_.powertrain.drivetrain_efficiency > 0.0)
-        ? (drive_force * vehicle_.tire.tire_radius) / (ratio * vehicle_.powertrain.drivetrain_efficiency)
-        : 0.0;
+    const double fx_tyre = drive_force - brake_force;
+    const double fy_tyre = m * model_->lateralDemand(v, point.kappa, rc);
+    const double p = vehicle_.tire.combined_exponent;
+    const double ux = (fx_capacity > 1.0) ? std::abs(fx_tyre) / std::max(1.0, fb.fy_capacity * vehicle_.tire.mu_x / vehicle_.tire.mu_y) : 0.0;
+    const double uy = fb.lateral_usage;
+    const double usage = std::pow(std::pow(std::min(1.5, ux), p) + std::pow(std::min(1.5, uy), p), 1.0 / p);
 
     state.s = point.s;
     state.n = point.n;
     state.x = point.x;
     state.y = point.y;
     state.z = point.z;
-    state.v = velocity;
-    state.v_kmh = velocity * 3.6;
+    state.v = v;
+    state.v_kmh = v * 3.6;
     state.ax = ax;
-    state.ay = velocity * velocity * point.kappa;
-    state.az = downforce / vehicle_.mass.mass;
+    state.ay = v * v * point.kappa;
+    state.az = fb.downforce / m;
     state.curvature = point.kappa;
     state.radius = (std::abs(point.kappa) > 1e-9) ? (1.0 / std::abs(point.kappa)) : 1e9;
     state.banking_angle = point.banking;
-    state.drag_force = drag_force;
-    state.downforce = downforce;
-    state.vertical_load = vertical_load;
+    state.drag_force = fb.drag;
+    state.downforce = fb.downforce;
+    state.vertical_load = fb.fz_front + fb.fz_rear;
     state.throttle = throttle;
     state.brake = brake;
     state.steering_angle = std::atan(vehicle_.mass.wheelbase * point.kappa);
@@ -527,21 +674,68 @@ SimulationState QuasiSteadyStateSolver::createState(size_t index, double time, i
     state.rpm = rpm;
     state.engine_torque = engine_torque;
     state.wheel_force = drive_force;
-    state.tire_force_x = drive_force - brake_force;
-    state.tire_force_y = signed_lateral_force;
+    state.tire_force_x = fx_tyre;
+    state.tire_force_y = std::copysign(fy_tyre, point.kappa);
+    state.ers_power = ers_force * v / vehicle_.powertrain.drivetrain_efficiency;
+    state.drs_open = drs_open;
+    state.grip_usage = usage;
+    state.fz_front = fb.fz_front;
+    state.fz_rear = fb.fz_rear;
     state.timestamp = time;
     state.updateGForces();
-
     return state;
 }
 
-void QuasiSteadyStateSolver::exportGGVToFile(const std::string& filename) const {
-    if (!ggv_->isGenerated()) {
-        throw std::runtime_error("GGV diagram has not been generated - run solve() first");
+void QuasiSteadyStateSolver::exportGGVToFile(const std::string& filename, bool with_ers, bool drs_open) const {
+    if (v_.empty()) {
+        throw std::runtime_error("Run solve() before exporting a GGV diagram");
     }
-
+    with_ers = with_ers && options_.enable_ers && model_->hasERS();
+    drs_open = drs_open && options_.enable_drs && vehicle_.aero.drs.enabled;
+    if (!ggv_ || ggv_->hasERS() != with_ers || ggv_->isDRSOpen() != drs_open) {
+        ggv_ = std::make_unique<GGVGenerator>(vehicle_, with_ers, drs_open);
+    }
+    if (!ggv_->isGenerated()) {
+        ggv_->generate(0.0, std::max(stats_.top_speed + 5.0, 50.0), 0.5, 60.0, 1.0);
+    }
     ggv_->exportToCSV(filename);
     std::cout << "GGV diagram exported to CSV: " << filename << std::endl;
+}
+
+void QuasiSteadyStateSolver::exportRacingLine(const std::string& filename) const {
+    const std::filesystem::path output_path(filename);
+    if (output_path.has_parent_path()) {
+        std::filesystem::create_directories(output_path.parent_path());
+    }
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file for writing: " + filename);
+    }
+    file << "s_m,x_m,y_m,n_m,w_left_m,w_right_m,kappa_inv_m,s_center_m,v_corner_kmh,v_kmh,drs_zone,"
+         << "z_m,grade_pct,vertical_curvature_inv_m,banking_deg\n";
+    file << std::fixed << std::setprecision(10);
+    for (size_t i = 0; i < n_points_; ++i) {
+        const PathPoint& p = path_[i];
+        file << p.s << ',' << p.x << ',' << p.y << ',' << p.n << ',' << p.w_left << ',' << p.w_right << ','
+             << p.kappa << ',' << p.s_center << ','
+             << v_corner_[i] * 3.6 << ',' << (v_.empty() ? 0.0 : v_[i] * 3.6) << ','
+             << (segments_[i].drs_zone ? 1 : 0) << ',' << p.z << ',' << std::tan(p.grade) * 100.0 << ','
+             << p.vertical_curvature << ','
+             << p.banking * 180.0 / 3.14159265358979323846 << '\n';
+    }
+    std::cout << "Racing line exported to CSV: " << filename << std::endl;
+}
+
+void QuasiSteadyStateSolver::exportLineNodes(const std::string& filename) const {
+    if (line_node_s_.empty()) throw std::runtime_error("Run solve() before exporting line nodes");
+    const std::filesystem::path path(filename);
+    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
+    std::ofstream file(filename);
+    if (!file) throw std::runtime_error("Cannot write line nodes: " + filename);
+    file << "s_center_m,n_m\n" << std::setprecision(17);
+    for (size_t i = 0; i < line_node_s_.size(); ++i) {
+        file << line_node_s_[i] << ',' << line_node_offset_[i] << '\n';
+    }
 }
 
 } // namespace LapTimeSim

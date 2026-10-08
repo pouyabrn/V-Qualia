@@ -1,0 +1,23 @@
+montreal_2024     calibration   real   71.742  sim   72.279  err  +0.75%  rms   8.5 km/h  vmax 328.0/333.1  apex real/sim: 80/98 141/141 102/103 139/114 61/78 137/135
+montreal_2025     calibration   real   70.899  sim   70.852  err  -0.07%  rms   9.4 km/h  vmax 332.0/329.5  apex real/sim: 80/102 146/147 101/107 140/118 65/81 134/140
+monza_2024        calibration   real   79.327  sim   79.389  err  +0.08%  rms   6.7 km/h  vmax 347.0/345.5  apex real/sim: 73/82 113/119 207/184 190/174 194/174 215/215
+monza_2025        calibration   real   78.792  sim   78.715  err  -0.10%  rms   6.2 km/h  vmax 348.0/345.6  apex real/sim: 73/85 111/122 208/188 190/178 195/178 217/218
+shanghai_2024     calibration   real   93.660  sim   92.729  err  -0.99%  rms  11.7 km/h  vmax 336.0/323.9  apex real/sim: 87/102 77/96 110/131 90/91 64/68 178/147
+shanghai_2025     calibration   real   90.641  sim   90.572  err  -0.08%  rms  13.0 km/h  vmax 330.0/326.3  apex real/sim: 98/113 97/105 82/99 122/136 100/94 65/70 183/152
+zandvoort_2024    calibration   real   69.673  sim   69.692  err  +0.03%  rms  11.8 km/h  vmax 329.0/328.0  apex real/sim: 120/118 138/147 114/138 118/138 91/107 201/171
+zandvoort_2025    calibration   real   68.662  sim   68.666  err  +0.01%  rms  12.7 km/h  vmax 326.0/326.4  apex real/sim: 126/121 150/154 239/239 121/142 115/141 101/110 209/175
+austin_2024       OUT-OF-SAMPLE real   92.330  sim   93.536  err  +1.31%  rms  15.3 km/h  vmax 327.0/321.1  apex real/sim: 86/94 160/138 80/94 91/104 102/114 89/96 218/183 104/105
+austin_2025       OUT-OF-SAMPLE real   92.510  sim   91.698  err  -0.88%  rms  14.5 km/h  vmax 324.0/325.7  apex real/sim: 84/97 233/215 147/142 80/96 91/107 100/117 88/99 218/187 106/108
+budapest_2025     OUT-OF-SAMPLE real   74.890  sim   74.926  err  +0.05%  rms  12.7 km/h  vmax 318.0/325.6  apex real/sim: 98/107 127/136 249/203 167/175 115/114 167/145 244/219 121/125 108/122 153/160
+mexico_2024       OUT-OF-SAMPLE real   75.946  sim   74.358  err  -2.09%  rms   9.6 km/h  vmax 349.0/352.6  apex real/sim: 105/106 70/87 80/98 181/168 174/167 131/141 66/80 101/120
+mexico_2025       OUT-OF-SAMPLE real   75.586  sim   73.275  err  -3.06%  rms  10.0 km/h  vmax 351.0/354.8  apex real/sim: 107/109 74/89 85/100 194/171 186/170 136/144 68/82 105/123
+sakhir_2024       OUT-OF-SAMPLE real   89.165  sim   87.993  err  -1.31%  rms  12.3 km/h  vmax 319.0/315.4  apex real/sim: 65/90 127/128 219/161 79/101 77/101 170/155 146/159 134/134
+sakhir_2025       OUT-OF-SAMPLE real   89.841  sim   86.312  err  -3.93%  rms  13.0 km/h  vmax 315.0/321.7  apex real/sim: 67/92 123/131 209/165 79/104 76/104 161/160 141/163 126/138
+silverstone_2024  OUT-OF-SAMPLE real   85.819  sim   88.095  err  +2.65%  rms  14.2 km/h  vmax 325.0/316.6  apex real/sim: 90/102 116/127 223/177 240/195 107/119
+silverstone_2025  OUT-OF-SAMPLE real   84.892  sim   86.328  err  +1.69%  rms  14.1 km/h  vmax 324.0/320.7  apex real/sim: 110/113 89/106 116/131 230/183 239/202 106/123
+spielberg_2024    OUT-OF-SAMPLE real   64.314  sim   66.563  err  +3.50%  rms  17.5 km/h  vmax 324.0/330.0  apex real/sim: 145/127 67/77 108/105 203/165 230/177 198/162
+spielberg_2025    OUT-OF-SAMPLE real   63.971  sim   65.260  err  +2.02%  rms  15.5 km/h  vmax 324.0/329.7  apex real/sim: 150/132 74/80 112/109 207/172 233/185 260/207 201/168
+suzuka_2024       OUT-OF-SAMPLE real   88.197  sim   89.068  err  +0.99%  rms  12.0 km/h  vmax 324.0/317.9  apex real/sim: 172/168 229/166 223/186 189/180 139/133 74/86 168/177 89/104
+suzuka_2025       OUT-OF-SAMPLE real   86.983  sim   87.202  err  +0.25%  rms  10.2 km/h  vmax 325.0/319.2  apex real/sim: 178/175 229/173 225/194 199/187 141/138 77/88 186/185 91/108
+calibration   n= 8  mean -0.05%  mean|err| 0.26%  max|err| 0.99%  mean speed rms 10.0 km/h
+OUT-OF-SAMPLE n=13  mean +0.09%  mean|err| 1.82%  max|err| 3.93%  mean speed rms 13.1 km/h

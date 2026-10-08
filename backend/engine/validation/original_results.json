@@ -1,0 +1,58 @@
+[
+  {
+    "id": "f1_montreal_2024",
+    "original_vehicle": "examples/f1_2024.json",
+    "real_s": 71.742,
+    "original_s": 73.437,
+    "original_error_pct": 2.3626327674165664
+  },
+  {
+    "id": "f1_montreal_2025",
+    "original_vehicle": "examples/f1_2025.json",
+    "real_s": 70.899,
+    "original_s": 72.802,
+    "original_error_pct": 2.6840999167830377
+  },
+  {
+    "id": "f1_monza_2024",
+    "original_vehicle": "examples/f1_2024_monza.json",
+    "real_s": 79.327,
+    "original_s": 82.572,
+    "original_error_pct": 4.090662699963448
+  },
+  {
+    "id": "f1_monza_2025",
+    "original_vehicle": "examples/f1_2025_monza.json",
+    "real_s": 78.792,
+    "original_s": 81.775,
+    "original_error_pct": 3.785917352015438
+  },
+  {
+    "id": "f1_shanghai_2024",
+    "original_vehicle": "examples/f1_2024.json",
+    "real_s": 93.66,
+    "original_s": 91.667,
+    "original_error_pct": -2.1279094597480195
+  },
+  {
+    "id": "f1_shanghai_2025",
+    "original_vehicle": "examples/f1_2025.json",
+    "real_s": 90.641,
+    "original_s": 90.734,
+    "original_error_pct": 0.1026025749936445
+  },
+  {
+    "id": "f1_zandvoort_2024",
+    "original_vehicle": "examples/f1_2024_monaco.json",
+    "real_s": 69.673,
+    "original_s": 73.217,
+    "original_error_pct": 5.086618919811113
+  },
+  {
+    "id": "f1_zandvoort_2025",
+    "original_vehicle": "examples/f1_2025_monaco.json",
+    "real_s": 68.662,
+    "original_s": 72.394,
+    "original_error_pct": 5.435320847047856
+  }
+]

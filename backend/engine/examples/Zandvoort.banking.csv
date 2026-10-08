@@ -1,0 +1,8 @@
+# Effective banked corners of Circuit Zandvoort, fitted with the F1 qualifying presets.
+# These average model angles compensate for the coarse centreline; they are NOT surveyed peak angles.
+# Turn 3 (Hugenholtzbocht): left hairpin, centreline curvature peaks at 868-942 m, banked ~19 deg.
+# Turn 14 (Arie Luyendykbocht): long right-hander onto the main straight (R ~130 m arc at 3782-3912 m), banked ~18 deg.
+# Turn 13 (R ~45 m at 3576-3612 m) is not banked.
+# s_start_m,s_end_m,banking_deg,ramp_m
+800,990,9.201453,40
+3730,3970,17.845193,40

@@ -1,114 +1,50 @@
-import { useState, useEffect } from 'react';
-import Header from './components/layout/Header';
-import Footer from './components/layout/Footer';
-import HomePage from './components/pages/HomePage';
-import AnalyzePage from './components/pages/AnalyzePage';
-import PredictPage from './components/pages/PredictPage';
-import CarsPage from './components/pages/CarsPage';
-import TracksPage from './components/pages/TracksPage';
-import ComparePage from './components/pages/ComparePage';
-import GGVPage from './components/pages/GGVPage';
-import LivePage from './components/pages/LivePage';
-import LiveStandalone from './components/pages/LiveStandalone';
-import LapReplay from './components/pages/LapReplay';
-import LapReplayViewer from './components/pages/LapReplayViewer';
+import { lazy, Suspense, useState, useEffect } from 'react';
+import { Menu, Activity, Gauge, GitCompare, Car, Map, Radio, SlidersHorizontal, BookOpen } from 'lucide-react';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import { parseCSV } from './utils/csvParser';
+const Predict = lazy(() => import('./components/pages/PredictPage'));
+const Analyze = lazy(() => import('./components/pages/AnalyzePage'));
+const Compare = lazy(() => import('./components/pages/ComparePage'));
+const GGV = lazy(() => import('./components/pages/GGVPage'));
+const Cars = lazy(() => import('./components/pages/CarsPage'));
+const Tracks = lazy(() => import('./components/pages/TracksPage'));
+const Live = lazy(() => import('./components/pages/LivePage'));
+const LiveStandalone = lazy(() => import('./components/pages/LiveStandalone'));
+const Replay = lazy(() => import('./components/pages/LapReplayViewer'));
+const nav = [['predict', 'Lap prediction', Gauge], ['analyze', 'Telemetry', Activity], ['compare', 'Lap comparison', GitCompare],
+  ['ggv', 'GGV envelope', SlidersHorizontal], ['cars', 'Vehicles', Car], ['tracks', 'Circuits', Map], ['live', 'Live telemetry', Radio]];
+const getLocation = () => window.location.hash || '#/predict';
 
-function App() {
-  // ALL HOOKS MUST BE AT THE TOP - React Rules of Hooks!
-  const [activeTab, setActiveTab] = useState('home');
-  const [isStandalone, setIsStandalone] = useState(false);
-  const [telemetryData, setTelemetryData] = useState(null);
-  const [fileName, setFileName] = useState('');
-  const [rawCsvText, setRawCsvText] = useState('');
-  
-  // Check for standalone mode and lap replay
-  useEffect(() => {
-    const checkStandalone = () => {
-      const hash = window.location.hash;
-      setIsStandalone(
-        hash === '#/live-standalone' || 
-        hash === '#/lap-replay' || 
-        hash.startsWith('#/lap-replay-viewer')
-      );
-    };
-    
-    checkStandalone();
-    window.addEventListener('hashchange', checkStandalone);
-    
-    return () => window.removeEventListener('hashchange', checkStandalone);
-  }, []);
-
-  // EARLY RETURN AFTER ALL HOOKS - Now it's safe!
-  if (isStandalone) {
-    const hash = window.location.hash;
-    console.log('Rendering standalone mode:', hash);
-    
-    if (hash === '#/lap-replay') {
-      return <LapReplay />;
-    }
-    
-    if (hash.startsWith('#/lap-replay-viewer')) {
-      // LapReplayViewer will load CSV from URL parameters or localStorage
-      return <LapReplayViewer />;
-    }
-    
-    return <LiveStandalone />;
-  }
-
-  // Handle telemetry file upload
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target.result;
-        setRawCsvText(text); // Store raw CSV
-        const data = parseCSV(text);
-        setTelemetryData(data);
-        setActiveTab('analyze');
-      };
-      reader.readAsText(file);
-    }
+export default function App() {
+  const [location, setLocation] = useState(getLocation);
+  const route = location.slice(2).split('?')[0] || 'predict';
+  const [sidebar, setSidebar] = useState(() => window.innerWidth > 850);
+  const [dataset, setDataset] = useState(null);
+  const [savedRun, setSavedRun] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => { const change = () => setLocation(getLocation()); window.addEventListener('hashchange', change);
+    return () => window.removeEventListener('hashchange', change); }, []);
+  const upload = async event => {
+    const file = event.target.files?.[0]; if (!file) return;
+    try { const raw = await file.text(); setDataset({ data: parseCSV(raw), name: file.name, raw }); setError(''); }
+    catch (e) { setError(e.message); }
+    event.target.value = '';
   };
-
-  return (
-    <ErrorBoundary>
-      <div className="min-h-screen bg-black text-gray-200">
-        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <main className="container mx-auto px-6 py-8">
-          {activeTab === 'home' && <HomePage setActiveTab={setActiveTab} />}
-
-          {activeTab === 'analyze' && (
-            <AnalyzePage
-              telemetryData={telemetryData}
-              fileName={fileName}
-              onFileUpload={handleFileUpload}
-              rawCsvText={rawCsvText}
-            />
-          )}
-
-          {activeTab === 'compare' && <ComparePage />}
-
-          {activeTab === 'ggv' && <GGVPage />}
-
-          {activeTab === 'predict' && <PredictPage />}
-
-          {activeTab === 'live' && <LivePage />}
-
-          {activeTab === 'cars' && <CarsPage />}
-
-          {activeTab === 'tracks' && <TracksPage />}
-        </main>
-
-        <Footer />
-      </div>
-    </ErrorBoundary>
-  );
+  const standalone = ['lap-replay', 'lap-replay-viewer', 'live-standalone'].includes(route);
+  const title = nav.find(n => n[0] === route)?.[1] || 'Lap prediction';
+  return <ErrorBoundary><Suspense fallback={<div className="status-message">Loading workspace…</div>}>
+    {standalone ? (route === 'live-standalone' ? <LiveStandalone /> : <Replay />) : <div className="app-shell">
+      <header className="tool-header"><button className="icon-button" aria-label="Toggle navigation" aria-expanded={sidebar} onClick={() => setSidebar(!sidebar)}><Menu size={19} /></button>
+        <a className="wordmark" href="#/predict">V–QUALIA</a><span className="header-divider" /><span className="header-title">{title}</span>
+        <span className="header-note">VEHICLE DYNAMICS WORKSPACE</span></header>
+      <div className="shell-body">{sidebar && <><button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setSidebar(false)} />
+        <aside className="tool-sidebar"><div className="sidebar-label">WORKSPACE</div><nav aria-label="Workspace navigation">{nav.map(([id, label, Icon], i) => <a key={id} href={`#/${id}`} className={`${route === id ? 'selected' : ''} ${i === 4 ? 'nav-divider' : ''}`} onClick={() => { if (window.innerWidth <= 850) setSidebar(false); }}><Icon size={17} />{label}</a>)}</nav>
+          <div className="sidebar-bottom"><BookOpen size={15} /><a href="https://github.com/pouyabrn/LapPredictionEngine/blob/main/validation/REVIEW_REPORT.md" target="_blank" rel="noreferrer">Model & validation</a>
+            <p>Quasi-steady-state prediction.<br />Use measured data to check the model.</p></div></aside></>}
+        <main className="workspace-main" id="main-content">
+          {error && <div role="alert" className="error-message">{error}</div>}
+          {route === 'analyze' ? <Analyze telemetryData={dataset?.data} fileName={dataset?.name} rawCsvText={dataset?.raw} onFileUpload={upload} /> :
+            route === 'compare' ? <Compare /> : route === 'ggv' ? <GGV key={location} /> : route === 'cars' ? <Cars /> : route === 'tracks' ? <Tracks /> : route === 'live' ? <Live /> : <Predict savedRun={savedRun} onRun={setSavedRun} />}
+        </main></div></div>}
+  </Suspense></ErrorBoundary>;
 }
-
-export default App;
-

@@ -15,7 +15,7 @@ services:
       - NODE_ENV=production
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -33,8 +33,7 @@ services:
       - ./backend/data/cars:/app/data/cars
       - ./backend/data/tracks:/app/data/tracks
       - ./backend/data/predictions:/app/data/predictions
-      # Mount f1_cache for FastF1 data persistence
-      - ./f1_cache:/app/f1_cache
+      - ./backend/data/line_cache:/app/data/line_cache
     networks:
       - vqualia-network
     environment:

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "f1_montreal_2024",
+    "set": "calibration",
+    "speed_rms_kmh": 8.5
+  },
+  {
+    "id": "f1_montreal_2025",
+    "set": "calibration",
+    "speed_rms_kmh": 9.4
+  },
+  {
+    "id": "f1_monza_2024",
+    "set": "calibration",
+    "speed_rms_kmh": 6.7
+  },
+  {
+    "id": "f1_monza_2025",
+    "set": "calibration",
+    "speed_rms_kmh": 6.2
+  },
+  {
+    "id": "f1_shanghai_2024",
+    "set": "calibration",
+    "speed_rms_kmh": 11.7
+  },
+  {
+    "id": "f1_shanghai_2025",
+    "set": "calibration",
+    "speed_rms_kmh": 13.0
+  },
+  {
+    "id": "f1_zandvoort_2024",
+    "set": "calibration",
+    "speed_rms_kmh": 11.8
+  },
+  {
+    "id": "f1_zandvoort_2025",
+    "set": "calibration",
+    "speed_rms_kmh": 12.7
+  },
+  {
+    "id": "f1_austin_2024",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 15.3
+  },
+  {
+    "id": "f1_austin_2025",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 14.5
+  },
+  {
+    "id": "f1_budapest_2025",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 12.7
+  },
+  {
+    "id": "f1_mexico_2024",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 9.6
+  },
+  {
+    "id": "f1_mexico_2025",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 10.0
+  },
+  {
+    "id": "f1_sakhir_2024",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 12.3
+  },
+  {
+    "id": "f1_sakhir_2025",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 13.0
+  },
+  {
+    "id": "f1_silverstone_2024",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 14.2
+  },
+  {
+    "id": "f1_silverstone_2025",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 14.1
+  },
+  {
+    "id": "f1_spielberg_2024",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 17.5
+  },
+  {
+    "id": "f1_spielberg_2025",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 15.5
+  },
+  {
+    "id": "f1_suzuka_2024",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 12.0
+  },
+  {
+    "id": "f1_suzuka_2025",
+    "set": "OUT-OF-SAMPLE",
+    "speed_rms_kmh": 10.2
+  }
+]

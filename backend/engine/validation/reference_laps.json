@@ -1,0 +1,404 @@
+{
+  "description": "Real qualifying laps used to validate the C++ engine. 'calibration' cases were used to identify the F1 car parameters, 'out-of-sample' tracks were not used in the F1 fit. F2 grip is calibrated on Monza 2024 only; 'cross-car' cases use the frozen F2 grip with estimated aero packages. Air density from F1 session weather (a proxy for F2).",
+  "cases": [
+    {
+      "id": "f1_montreal_2024",
+      "set": "calibration",
+      "event": "2024 Canadian Grand Prix Q",
+      "driver": "RUS, Mercedes",
+      "track": "examples/montreal.csv",
+      "vehicle": "examples/f1_2024_quali_mediumdf.json",
+      "real_lap_s": 71.742,
+      "args": [
+        "--air-density",
+        "1.179"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2024/canadian-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_montreal_2025",
+      "set": "calibration",
+      "event": "2025 Canadian Grand Prix Q",
+      "driver": "RUS, Mercedes",
+      "track": "examples/montreal.csv",
+      "vehicle": "examples/f1_2025_quali_mediumdf.json",
+      "real_lap_s": 70.899,
+      "args": [
+        "--air-density",
+        "1.202"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/canadian-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_monza_2024",
+      "set": "calibration",
+      "event": "2024 Italian Grand Prix Q",
+      "driver": "NOR, McLaren",
+      "track": "examples/Monza.csv",
+      "vehicle": "examples/f1_2024_quali_lowdf.json",
+      "real_lap_s": 79.327,
+      "args": [
+        "--air-density",
+        "1.124"
+      ],
+      "source": "https://www.formula1.com/en/latest/article/norris-seals-pole-position-ahead-of-piastri-at-monza-as-mclaren-secure-front.4ZYpKyV7XxYPQoJ8WzLTtX",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_monza_2025",
+      "set": "calibration",
+      "event": "2025 Italian Grand Prix Q",
+      "driver": "VER, Red Bull Racing",
+      "track": "examples/Monza.csv",
+      "vehicle": "examples/f1_2025_quali_lowdf.json",
+      "real_lap_s": 78.792,
+      "args": [
+        "--air-density",
+        "1.154"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/italian-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_shanghai_2024",
+      "set": "calibration",
+      "event": "2024 Chinese Grand Prix Q",
+      "driver": "VER, Red Bull Racing",
+      "track": "examples/Shanghai.csv",
+      "vehicle": "examples/f1_2024_quali_mediumdf.json",
+      "real_lap_s": 93.66,
+      "args": [
+        "--air-density",
+        "1.182"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2024/chinese-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_shanghai_2025",
+      "set": "calibration",
+      "event": "2025 Chinese Grand Prix Q",
+      "driver": "PIA, McLaren",
+      "track": "examples/Shanghai.csv",
+      "vehicle": "examples/f1_2025_quali_mediumdf.json",
+      "real_lap_s": 90.641,
+      "args": [
+        "--air-density",
+        "1.180"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/chinese-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_zandvoort_2024",
+      "set": "calibration",
+      "event": "2024 Dutch Grand Prix Q",
+      "driver": "NOR, McLaren",
+      "track": "examples/Zandvoort.csv",
+      "vehicle": "examples/f1_2024_quali_highdf.json",
+      "real_lap_s": 69.673,
+      "args": [
+        "--air-density",
+        "1.165"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2024/dutch-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_zandvoort_2025",
+      "set": "calibration",
+      "event": "2025 Dutch Grand Prix Q",
+      "driver": "PIA, McLaren",
+      "track": "examples/Zandvoort.csv",
+      "vehicle": "examples/f1_2025_quali_highdf.json",
+      "real_lap_s": 68.662,
+      "args": [
+        "--air-density",
+        "1.186"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/dutch-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_austin_2024",
+      "set": "out-of-sample",
+      "event": "2024 United States Grand Prix Q",
+      "driver": "NOR, McLaren",
+      "track": "examples/Austin.csv",
+      "vehicle": "examples/f1_2024_quali_mediumdf.json",
+      "real_lap_s": 92.33,
+      "args": [
+        "--air-density",
+        "1.156"
+      ],
+      "source": "https://www.formula1.com/en/latest/article/norris-clinches-pole-position-ahead-of-verstappen-in-austin-as-russell.5AgHxJQ1wldaEXPbWppToy",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_austin_2025",
+      "set": "out-of-sample",
+      "event": "2025 United States Grand Prix Q",
+      "driver": "VER, Red Bull Racing",
+      "track": "examples/Austin.csv",
+      "vehicle": "examples/f1_2025_quali_mediumdf.json",
+      "real_lap_s": 92.51,
+      "args": [
+        "--air-density",
+        "1.114"
+      ],
+      "source": "https://www.formula1.com/en/results/2025/races/1271/usa/qualifying",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_budapest_2025",
+      "set": "out-of-sample",
+      "event": "2025 Hungarian Grand Prix Q",
+      "driver": "NOR, McLaren",
+      "track": "examples/Budapest.csv",
+      "vehicle": "examples/f1_2025_quali_highdf.json",
+      "real_lap_s": 74.89,
+      "args": [
+        "--air-density",
+        "1.131"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/hungarian-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_mexico_2024",
+      "set": "out-of-sample",
+      "event": "2024 Mexico City Grand Prix Q",
+      "driver": "SAI, Ferrari",
+      "track": "examples/MexicoCity.csv",
+      "vehicle": "examples/f1_2024_quali_highdf.json",
+      "real_lap_s": 75.946,
+      "args": [
+        "--air-density",
+        "0.922"
+      ],
+      "source": "https://www.formula1.com/en/results/2024/races/1248/mexico/qualifying",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_mexico_2025",
+      "set": "out-of-sample",
+      "event": "2025 Mexico City Grand Prix Q",
+      "driver": "NOR, McLaren",
+      "track": "examples/MexicoCity.csv",
+      "vehicle": "examples/f1_2025_quali_highdf.json",
+      "real_lap_s": 75.586,
+      "args": [
+        "--air-density",
+        "0.904"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/mexico-city-grand-prix/qualifying",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_sakhir_2024",
+      "set": "out-of-sample",
+      "event": "2024 Bahrain Grand Prix Q",
+      "driver": "LEC, Ferrari",
+      "track": "examples/Sakhir.csv",
+      "vehicle": "examples/f1_2024_quali_mediumdf.json",
+      "real_lap_s": 89.165,
+      "args": [
+        "--air-density",
+        "1.215"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2024/bahrain-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_sakhir_2025",
+      "set": "out-of-sample",
+      "event": "2025 Bahrain Grand Prix Q",
+      "driver": "PIA, McLaren",
+      "track": "examples/Sakhir.csv",
+      "vehicle": "examples/f1_2025_quali_mediumdf.json",
+      "real_lap_s": 89.841,
+      "args": [
+        "--air-density",
+        "1.160"
+      ],
+      "source": "https://www.fia.com/system/files/decision-document/2025_bahrain_grand_prix_-_provisional_qualifying_classification.pdf",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_silverstone_2024",
+      "set": "out-of-sample",
+      "event": "2024 British Grand Prix Q",
+      "driver": "RUS, Mercedes",
+      "track": "examples/Silverstone.csv",
+      "vehicle": "examples/f1_2024_quali_mediumdf.json",
+      "real_lap_s": 85.819,
+      "args": [
+        "--air-density",
+        "1.191"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2024/british-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_silverstone_2025",
+      "set": "out-of-sample",
+      "event": "2025 British Grand Prix Q",
+      "driver": "VER, Red Bull Racing",
+      "track": "examples/Silverstone.csv",
+      "vehicle": "examples/f1_2025_quali_mediumdf.json",
+      "real_lap_s": 84.892,
+      "args": [
+        "--air-density",
+        "1.169"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/british-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_spielberg_2024",
+      "set": "out-of-sample",
+      "event": "2024 Austrian Grand Prix Q",
+      "driver": "VER, Red Bull Racing",
+      "track": "examples/Spielberg.csv",
+      "vehicle": "examples/f1_2024_quali_mediumdf.json",
+      "real_lap_s": 64.314,
+      "args": [
+        "--air-density",
+        "1.067"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2024/austrian-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_spielberg_2025",
+      "set": "out-of-sample",
+      "event": "2025 Austrian Grand Prix Q",
+      "driver": "NOR, McLaren",
+      "track": "examples/Spielberg.csv",
+      "vehicle": "examples/f1_2025_quali_mediumdf.json",
+      "real_lap_s": 63.971,
+      "args": [
+        "--air-density",
+        "1.088"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/austrian-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_suzuka_2024",
+      "set": "out-of-sample",
+      "event": "2024 Japanese Grand Prix Q",
+      "driver": "VER, Red Bull Racing",
+      "track": "examples/Suzuka.csv",
+      "vehicle": "examples/f1_2024_quali_mediumdf.json",
+      "real_lap_s": 88.197,
+      "args": [
+        "--air-density",
+        "1.211"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2024/japanese-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f1_suzuka_2025",
+      "set": "out-of-sample",
+      "event": "2025 Japanese Grand Prix Q",
+      "driver": "VER, Red Bull Racing",
+      "track": "examples/Suzuka.csv",
+      "vehicle": "examples/f1_2025_quali_mediumdf.json",
+      "real_lap_s": 86.983,
+      "args": [
+        "--air-density",
+        "1.223"
+      ],
+      "source": "https://www.fia.com/events/fia-formula-one-world-championship/season-2025/japanese-grand-prix/qualifying-classification",
+      "timing_note": "Fastest valid dry lap across Q1/Q2/Q3, not necessarily the pole lap; telemetry via FastF1."
+    },
+    {
+      "id": "f2_monza_2024",
+      "set": "f2-calibration",
+      "event": "2024 Monza F2 Q",
+      "driver": "Maloney, Rodin",
+      "track": "examples/Monza.csv",
+      "vehicle": "examples/f2_2024_quali_monza.json",
+      "real_lap_s": 92.16,
+      "source": "https://www.fiaformula2.com/Latest/23hfDSdeAUapjehlhLGXKZ/qualifying-maloney-beats-hadjar-to-take-maiden-f2-pole-position-in-monza",
+      "args": [
+        "--air-density",
+        "1.124"
+      ]
+    },
+    {
+      "id": "f2_monza_2025",
+      "set": "cross-car",
+      "event": "2025 Monza F2 Q",
+      "driver": "Browning, Hitech",
+      "track": "examples/Monza.csv",
+      "vehicle": "examples/f2_2024_quali_monza.json",
+      "real_lap_s": 92.39,
+      "source": "https://www.fia.com/events/formula-2-championship/season-2025/monza/qualifying-classification",
+      "args": [
+        "--air-density",
+        "1.154"
+      ]
+    },
+    {
+      "id": "f2_spielberg_2024",
+      "set": "cross-car",
+      "event": "2024 Spielberg F2 Q",
+      "driver": "Hauger, MP Motorsport",
+      "track": "examples/Spielberg.csv",
+      "vehicle": "examples/f2_2024_quali_mediumdf.json",
+      "real_lap_s": 75.487,
+      "source": "https://www.fia.com/sites/default/files/2024_11_aut_f2_q0_timing_qualifyingsessionprovisionalclassification_v01.pdf",
+      "args": [
+        "--air-density",
+        "1.067"
+      ]
+    },
+    {
+      "id": "f2_silverstone_2024",
+      "set": "cross-car",
+      "event": "2024 Silverstone F2 Q",
+      "driver": "Hadjar, Campos",
+      "track": "examples/Silverstone.csv",
+      "vehicle": "examples/f2_2024_quali_mediumdf.json",
+      "real_lap_s": 99.368,
+      "source": "https://www.fia.com/sites/default/files/decision-document/2024%20Silverstone%20Event%20-%20F2%20Qualifying%20-%20final%20classification.pdf",
+      "args": [
+        "--air-density",
+        "1.191"
+      ]
+    },
+    {
+      "id": "f2_sakhir_2024",
+      "set": "cross-car",
+      "event": "2024 Sakhir F2 Q",
+      "driver": "Bortoleto, Invicta",
+      "track": "examples/Sakhir.csv",
+      "vehicle": "examples/f2_2024_quali_mediumdf.json",
+      "real_lap_s": 101.915,
+      "source": "https://www.fia.com/events/formula-2-championship/season-2024/qualifying-classifications",
+      "args": [
+        "--air-density",
+        "1.215"
+      ]
+    },
+    {
+      "id": "f2_budapest_2024",
+      "set": "cross-car",
+      "event": "2024 Budapest F2 Q",
+      "driver": "Aron, Hitech",
+      "track": "examples/Budapest.csv",
+      "vehicle": "examples/f2_2024_quali_highdf.json",
+      "real_lap_s": 90.028,
+      "source": "https://www.fia.com/sites/default/files/2024_13_hun_f2_q0_timing_qualifyingsessionprovisionalclassification_v01.pdf",
+      "args": [
+        "--air-density",
+        "1.143"
+      ]
+    }
+  ]
+}

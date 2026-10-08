@@ -1,0 +1,6 @@
+# DRS zones of montreal.csv (centreline distance, m), measured from the DRS-open intervals of the
+# 2025 Canadian Grand Prix qualifying pole lap (RUS) via FastF1.
+# s_start_m,s_end_m
+1492,1941
+3043,3826
+4046,168

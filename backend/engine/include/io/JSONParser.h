@@ -3,6 +3,8 @@
 #include "data/TrackData.h"
 #include "data/VehicleParams.h"
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace LapTimeSim {
 
@@ -89,6 +91,31 @@ public:
      * @return VehicleParams object
      */
     static VehicleParams parseVehicleJSON(const std::string& filepath);
+
+    /**
+     * @brief Parse vehicle parameters with dotted-path overrides applied on top of the file,
+     *        e.g. {"aerodynamics.ClA", "4.5"}, {"tire.mu_y", "1.9"}
+     */
+    static VehicleParams parseVehicleJSON(const std::string& filepath,
+                                          const std::vector<std::pair<std::string, std::string>>& overrides);
+
+    /**
+     * @brief Apply an optional banking sidecar "<track>.banking.csv" (s_start_m,s_end_m,banking_deg[,ramp_m])
+     *        defined on the centreline distance. Returns the number of banked sections applied.
+     */
+    static int applyBankingSidecar(TrackData& track, const std::string& track_filepath);
+
+    /**
+     * @brief Load optional DRS zones from "<track>.drs.csv" (s_start_m,s_end_m per row, centreline distance).
+     *        Returns an empty list when the sidecar does not exist.
+     */
+    static std::vector<std::pair<double, double>> loadDRSSidecar(const std::string& track_filepath);
+
+    /**
+     * @brief Apply an optional elevation profile "<track>.elevation.csv" (s_m,z_m per row, centreline
+     *        distance, periodic) and re-preprocess the track. Returns true when a profile was applied.
+     */
+    static bool applyElevationSidecar(TrackData& track, const std::string& track_filepath);
 };
 
 } // namespace LapTimeSim
