@@ -42,7 +42,7 @@ export default function GGVSurface({ data }) {
     const canvas = canvasRef.current; if (!canvas || !size.width || !size.height) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     canvas.width = Math.round(size.width * dpr); canvas.height = Math.round(size.height * dpr);
-    const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.fillStyle = '#141d26'; ctx.fillRect(0, 0, size.width, size.height);
+    const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.fillStyle = '#0b1420'; ctx.fillRect(0, 0, size.width, size.height);
     const az = view.azimuth * Math.PI / 180, el = view.elevation * Math.PI / 180;
     const scale = Math.min(size.width / 1.7, size.height / 1.8), cx = size.width * .51, cy = size.height * .48;
     const project = ([x, y, z]) => {
@@ -58,8 +58,8 @@ export default function GGVSurface({ data }) {
       .sort((a, b) => b.points.reduce((s, p) => s + p.depth, 0) - a.points.reduce((s, p) => s + p.depth, 0));
     for (const face of polygons) {
       ctx.beginPath(); face.points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath();
-      ctx.fillStyle = face.mode === 'accel' ? '#83bdcc88' : '#ab9dcc88'; ctx.fill();
-      ctx.strokeStyle = face.mode === 'accel' ? '#83bdcc45' : '#ab9dcc45'; ctx.lineWidth = .45; ctx.stroke();
+      ctx.fillStyle = face.mode === 'accel' ? '#c8e1f188' : '#ed718088'; ctx.fill();
+      ctx.strokeStyle = face.mode === 'accel' ? '#c8e1f145' : '#ed718045'; ctx.lineWidth = .45; ctx.stroke();
     }
     const label = (point, text, dx = 0, dy = 0, color = '#b4c9d5') => {
       const p = project(point); ctx.fillStyle = color; ctx.font = '10px Consolas, monospace'; ctx.fillText(text, p.x + dx, p.y + dy);
@@ -74,7 +74,7 @@ export default function GGVSurface({ data }) {
       label([-.5, -.5, (i - 1) * .6], `${((i - 1) * mesh.zmax / 9.81).toFixed(1)}`, -26, -5);
     }
     label([.58, -.5, 0], 'V / km/h', 0, 14); label([-.5, .58, 0], 'Ay / g', -15, -8); label([-.5, -.5, .69], 'Ax / g', -15, -4);
-    ctx.fillStyle = '#b4c9d5'; ctx.font = '11px Consolas, monospace'; ctx.fillText('GGV · Acceleration (cyan) / braking (purple)', 15, 20);
+    ctx.fillStyle = '#b4c9d5'; ctx.font = '11px Consolas, monospace'; ctx.fillText('GGV · Acceleration (ice) / braking (red)', 15, 20);
     ctx.fillStyle = '#839da9'; ctx.font = '10px Consolas, monospace'; ctx.fillText('ORTHOGRAPHIC · drag to rotate', 15, size.height - 12);
   }, [mesh, size, view]);
   const exportPNG = () => {

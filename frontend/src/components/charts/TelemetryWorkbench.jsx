@@ -23,7 +23,7 @@ export default function TelemetryWorkbench({ data, source = 'Telemetry' }) {
     <div className="plot-grid">
       <TracePlot {...common} title="Speed" units="km/h" channels={[{ key: 'speed_kmh', label: 'Vehicle speed' }]} formula="T = ∫ ds / v(s) · Vavg = (1/T) ∫ v(t) dt" />
       {group === 'dynamics' && <>
-        <TracePlot {...common} title="Driver demand" units="%" domain={[0, 100]} channels={[{ key: 'throttle_pct', label: 'Throttle' }, { key: 'brake_pct', label: 'Brake', color: '#ca939a' }]} formula={source === 'Simulated telemetry' ? 'Demand inferred by the simulator; controls are not measured driver inputs.' : 'Control channels from the imported file; missing values remain missing.'} />
+        <TracePlot {...common} title="Driver demand" units="%" domain={[0, 100]} channels={[{ key: 'throttle_pct', label: 'Throttle' }, { key: 'brake_pct', label: 'Brake', color: '#ed7180' }]} formula={source === 'Simulated telemetry' ? 'Demand inferred by the simulator; controls are not measured driver inputs.' : 'Control channels from the imported file; missing values remain missing.'} />
         <TracePlot {...common} title="Acceleration" units="g" channels={[{ key: 'g_long', label: 'Longitudinal' }, { key: 'g_lat', label: 'Lateral' }]} formula="gx = ax / g₀ · gy = ay / g₀ · g₀ = 9.81 m/s²" />
         <TracePlot {...common} title="Tire capacity usage" units="ratio" channels={[{ key: 'grip_usage', label: 'Combined demand' }]} formula="Model grip usage; values near 1 indicate operation near the tire limit." />
         <TracePlot {...common} title="Axle normal loads" units="N" channels={[{ key: 'fz_front_n', label: 'Front' }, { key: 'fz_rear_n', label: 'Rear' }]} formula="Fz,f + Fz,r = road-normal weight + downforce (with road-profile corrections)." />

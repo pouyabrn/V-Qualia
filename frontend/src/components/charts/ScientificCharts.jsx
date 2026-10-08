@@ -1,20 +1,22 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
 import { colors, formatValue } from '../../utils/chartFormatting';
 
-export function ChartFrame({ title, units, formula, children }) {
+export function ChartFrame({ title, units, formula, children, defer = false }) {
   const [expanded, setExpanded] = useState(false);
-  return <section className={`plot-panel ${expanded ? 'plot-expanded' : ''}`}>
+  const [visible, setVisible] = useState(!defer), section = useRef(null);
+  useEffect(() => { if (!defer || visible) return; const observer = new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) { setVisible(true); observer.disconnect(); } }, { rootMargin: '400px' }); observer.observe(section.current); return () => observer.disconnect(); }, [defer, visible]);
+  return <section ref={section} className={`plot-panel ${expanded ? 'plot-expanded' : ''}`}>
     <div className="plot-heading"><h3>{title} <span>{units}</span></h3><button className="icon-button" aria-label={`${expanded ? 'Restore' : 'Expand'} ${title}`} onClick={() => setExpanded(!expanded)}>{expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button></div>
-    <div className="plot-body">{children}</div>{formula && <div className="formula">{formula}</div>}
+    <div className="plot-body">{visible || expanded || !defer ? children : null}</div>{formula && <div className="formula">{formula}</div>}
   </section>;
 }
 
-export function TracePlot({ data, channels, title, units, formula, xKey = 'arc_length_m', xLabel = 'Distance / m', xUnit, cursor, domain = ['auto', 'auto'], syncId = 'lap-traces' }) {
+export function TracePlot({ data, channels, title, units, formula, xKey = 'arc_length_m', xLabel = 'Distance / m', xUnit, cursor, domain = ['auto', 'auto'], syncId = 'lap-traces', defer = false }) {
   const available = channels.filter(c => data.some(r => typeof r[c.key] === 'number' && Number.isFinite(r[c.key])));
   if (!available.length) return null;
-  return <ChartFrame title={title} units={units} formula={formula}><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 12, right: 18, bottom: 18, left: 3 }} syncId={syncId} syncMethod="value">
+  return <ChartFrame defer={defer} title={title} units={units} formula={formula}><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 12, right: 18, bottom: 18, left: 3 }} syncId={syncId} syncMethod="value">
     <CartesianGrid stroke="#293744" strokeDasharray="2 4" vertical={false} />
     <XAxis dataKey={xKey} type="number" domain={['dataMin', 'dataMax']} tickFormatter={v => Math.round(v)} tick={{ fill: '#8f9ea9', fontSize: 10 }} label={{ value: xLabel, position: 'insideBottom', offset: -12, fill: '#8f9ea9', fontSize: 11 }} />
     <YAxis domain={domain} tick={{ fill: '#8f9ea9', fontSize: 10 }} tickFormatter={v => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : Number(v.toFixed(1))} width={47} />

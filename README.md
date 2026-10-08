@@ -2,7 +2,7 @@
 
 A vehicle dynamics workspace. Give it a car and a circuit, predict a lap, then inspect the result against measured telemetry.
 
-This is meant to feel like an engineering tool: setup on the left, physical channels in the workspace, units on plots, and the equations where they help. The cyan/blue/purple palette is kept, with quieter colours. No marketing homepage, fake prediction progress, or invented driver scores.
+This is an instrument console: setup on the left, physical channels in the workspace, units on plots, and equations where they help. The interface uses an alien-tech direction with ice-silver traces and restrained signal-red accents. No marketing homepage, fake prediction progress, or invented driver scores.
 
 ## What it does
 
@@ -12,9 +12,13 @@ This is meant to feel like an engineering tool: setup on the left, physical chan
 - Circuit-filling animation during a solve, using soft blue/cyan tones. Replay fills the circuit with actual lap progress.
 - Rotatable 3D GGV acceleration/braking surfaces with PNG export, alongside velocity slices and straight-line envelopes, with feasibility flags and ERS/DRS conditions.
 - Measured or simulated CSV inspection and distance-aligned lap comparison, including elapsed-time delta.
+- Comparison exposes every available numeric telemetry channel, including custom columns, with overlays and differences against the reference lap.
+- A place-by-place comparison map overlays the racing lines. Select a physical station, zoom into local lines, and inspect channel values, differences, elapsed-time delta and lateral offsets. Matching uses a transverse gate through the reference heading; distant/opposite-direction crossings remain unavailable.
+- Chart laboratory: import arbitrary numeric CSV without requiring speed, create line/step/XY-scatter charts, choose up to eight channels and two Y axes, set labels/units/ranges, and save/load layouts. Imported files stay in the browser. Derived signals support gain/offset, arithmetic, derivatives and trapezoidal integrals; exported CSV includes the derived signals.
+- Replay shows instantaneous throttle and brake demand bars at the playback cursor. Missing control channels are labelled unavailable.
 - Vehicle and circuit libraries. Vehicle editing preserves advanced engine parameters.
 
-Plots use thin traces, restrained grids and explicit units. Missing channels are omitted. Time-weighted statistics use the complete dataset; plot reduction retains local extrema. Comparison interpolates at shared arc distance, which can still differ from identical physical position when driven lines differ.
+Plots use thin traces, restrained grids and explicit units. Missing channels are omitted. Time-weighted statistics use the complete dataset; plot reduction retains local extrema. Comparison interpolates at shared arc distance, which can still differ from identical physical position when driven lines differ. Use the spatial map when positions share an origin and metre scale. It does not register unrelated coordinate frames or guarantee matching through complex crossings. Saved chart layouts contain settings; the source CSV remains local and must be loaded again after refreshing.
 
 The live page is explicitly a **synthetic 10 Hz demonstration**. It has no connected vehicle feed.
 
